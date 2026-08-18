@@ -195,15 +195,17 @@ function CuisineCard({ cmd, isNew, onStatut }: { cmd: any; isNew: boolean; onSta
 
       {/* LIGNES PLATS */}
       <div style={{ padding:'0 16px 12px', borderTop:'1px solid var(--border)', paddingTop:'12px' }}>
-        {cmd.lignes.map((l: LigneCommande, i: number) => (
-          <div key={i} style={{ padding:'8px 0', borderBottom:'1px solid var(--surface2)', display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
-            <div>
-              <div style={{ fontWeight:600, fontSize:'1rem' }}>
-                <span style={{ fontFamily:'var(--font-display)', fontSize:'1.3rem', color:'var(--red)', marginRight:'8px' }}>{l.quantite}×</span>
-                {l.nom}
+        {cmd.lignes.map((l: any, i: number) => (
+          <div key={i} style={{ padding:'12px 0', borderBottom:'1px solid var(--surface2)' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:'12px' }}>
+              <span style={{ fontFamily:'var(--font-display)', fontSize:'2.2rem', color:'var(--red)', minWidth:'50px', textAlign:'center', lineHeight:1 }}>{l.quantite}×</span>
+              <div style={{ flex:1 }}>
+                <div style={{ fontFamily:'var(--font-display)', fontSize:'1.6rem', letterSpacing:'1px', color:'var(--text)', lineHeight:1.1 }}>
+                  {l.nom_plat || l.nom}
+                </div>
+                {l.complement_nom && <div style={{ fontSize:'0.9rem', color:'var(--gold)', marginTop:'6px', fontWeight:600 }}>↳ Avec : {l.complement_nom}</div>}
+                {l.remarque && <div style={{ fontSize:'0.85rem', color:'var(--red)', fontStyle:'italic', marginTop:'4px', background:'var(--red-soft)', padding:'4px 8px', borderRadius:'6px' }}>⚠ {l.remarque}</div>}
               </div>
-              {l.complement_nom && <div style={{ fontSize:'0.82rem', color:'var(--gold)', marginTop:'2px' }}>↳ {l.complement_nom}</div>}
-              {l.remarque && <div style={{ fontSize:'0.78rem', color:'var(--red)', fontStyle:'italic', marginTop:'2px' }}>⚠ {l.remarque}</div>}
             </div>
           </div>
         ))}
