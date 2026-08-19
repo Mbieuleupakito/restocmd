@@ -13,9 +13,24 @@ export default function CuisinePage() {
   const [alarm, setAlarm] = useState(false)
   const [alarmCmds, setAlarmCmds] = useState<number[]>([])
   const [now, setNow] = useState(Date.now())
-  const [veille, setVeille] = useState(false)
   const knownIds = useRef<Set<number>>(new Set())
   const alarmRef = useRef<any>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const scrollDir = useRef<number>(1)
+
+  // Défilement automatique
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const interval = setInterval(() => {
+      const maxScroll = el.scrollHeight - el.clientHeight
+      if (maxScroll <= 0) return
+      el.scrollTop += scrollDir.current * 2
+      if (el.scrollTop >= maxScroll) scrollDir.current = -1
+      if (el.scrollTop <= 0) scrollDir.current = 1
+    }, 40)
+    return () => clearInterval(interval)
+  }, [commandes])
 
   // Chrono tick
   useEffect(() => {
@@ -49,11 +64,11 @@ export default function CuisinePage() {
     if (navigator.vibrate) navigator.vibrate(0)
   }, [])
 
-  const triggerAlarm = useCallback((urgent = false) => {
+  const triggerAlarm = useCallback(() => {
     setAlarm(true)
-    playAlarm(urgent)
+    playAlarm(false)
     if (alarmRef.current) clearInterval(alarmRef.current)
-    alarmRef.current = setInterval(() => playAlarm(urgent), 2500)
+    alarmRef.current = setInterval(() => playAlarm(false), 2500)
   }, [playAlarm])
 
   // Son "ding" plat prêt → accueil
@@ -97,7 +112,7 @@ export default function CuisinePage() {
     const nouvelles = cmdsCuisine.filter((c:any) => !knownIds.current.has(c.id))
     if (nouvelles.length > 0) {
       setAlarmCmds(nouvelles.map((c:any) => c.id))
-      triggerAlarm(false)
+      triggerAlarm()
       nouvelles.forEach((c:any) => knownIds.current.add(c.id))
       setTimeout(() => setAlarmCmds([]), 4000)
     }
@@ -114,19 +129,7 @@ export default function CuisinePage() {
     return () => { supabase.removeChannel(ch); if(alarmRef.current) clearInterval(alarmRef.current) }
   }, [loadCommandes])
 
-  // Écran de veille — commande en attente > 15min
-  useEffect(() => {
-    const hasUrgent = commandes.some(c => {
-      const mins = (now - new Date(c.heure_creation).getTime()) / 60000
-      return c.statut === 'nouvelle' && mins > 15
-    })
-    if (hasUrgent && !alarm) {
-      setVeille(true)
-      triggerAlarm(true)
-    } else if (!hasUrgent) {
-      setVeille(false)
-    }
-  }, [commandes, now, alarm, triggerAlarm])
+
 
   const changerStatut = async (id: number, statut: Statut) => {
     await supabase.from('commandes').update({ statut, heure_modif: new Date().toISOString() }).eq('id', id)
@@ -143,24 +146,9 @@ export default function CuisinePage() {
   return (
     <div style={{ display:'flex', flexDirection:'column', height:'100vh', overflow:'hidden', background:'var(--bg)' }}>
 
-      {/* ÉCRAN DE VEILLE URGENT */}
-      {veille && (
-        <div onClick={() => { setVeille(false); stopAlarm() }}
-          style={{ position:'fixed', inset:0, zIndex:9998, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', cursor:'pointer', animation:'alarmFlash 0.4s infinite' }}>
-          <div style={{ fontFamily:'var(--font-display)', fontSize:'clamp(3rem,15vw,8rem)', color:'white', letterSpacing:'4px', textAlign:'center', textShadow:'0 0 40px rgba(255,0,0,0.8)', animation:'alarmPulse 0.6s ease-in-out infinite' }}>
-            ⚠️ URGENT !
-          </div>
-          <div style={{ fontFamily:'var(--font-display)', fontSize:'clamp(1.5rem,6vw,3rem)', color:'#ffd700', marginTop:'16px', letterSpacing:'3px' }}>
-            COMMANDE EN ATTENTE +15min
-          </div>
-          <div style={{ marginTop:'24px', fontSize:'1rem', color:'rgba(255,255,255,0.6)', letterSpacing:'2px' }}>
-            APPUYER POUR FERMER
-          </div>
-        </div>
-      )}
 
       {/* ALARM OVERLAY */}
-      {alarm && !veille && (
+      {alarm && (
         <div className="alarm-overlay" onClick={stopAlarm}>
           <div className="alarm-banner">
             🔔 NOUVELLE COMMANDE !<br/>
@@ -191,7 +179,7 @@ export default function CuisinePage() {
       </div>
 
       {/* COMMANDES */}
-      <div style={{ flex:1, overflowY:'auto', padding:'12px' }}>
+      <div ref={scrollRef} style={{ flex:1, overflowY:'auto', padding:'12px' }} onTouchStart={() => { scrollDir.current = 0 }} onMouseEnter={() => { scrollDir.current = 0 }} onMouseLeave={() => { scrollDir.current = 1 }} onTouchEnd={() => { setTimeout(() => { scrollDir.current = 1 }, 3000) }}>
         {commandes.length === 0 ? (
           <div className="empty-state"><span className="emoji">🍳</span><p>En attente de commandes...</p></div>
         ) : (
