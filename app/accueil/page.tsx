@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { CATEGORIES, PLATS, COMPLEMENTS, RESTAURANT } from '@/lib/menu'
@@ -42,10 +42,35 @@ export default function AccueilPage() {
   const [notes, setNotes] = useState('')
   const [showFacture, setShowFacture] = useState<Commande | null>(null)
   const [loading, setLoading] = useState(false)
+  const [menuCustom, setMenuCustom] = useState<any[]>([])
+
+  useEffect(() => {
+    supabase.from('menu_custom').select('*').eq('disponible', true).order('nom').then(({ data }) => {
+      if (data) setMenuCustom(data)
+    })
+  }, [])
   const [showServies, setShowServies] = useState(false)
   const [showAddMenu, setShowAddMenu] = useState(false)
   const [newPlat, setNewPlat] = useState({ nom: '', categorie: 'plats', prix: '', prix2: '', complement: false })
   const [menuMsg, setMenuMsg] = useState('')
+
+  const [pretNotif, setPretNotif] = useState<number[]>([])
+  const prevStatuts = useRef<Record<number,string>>({})
+
+  const playPretSound = useCallback(() => {
+    try {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)()
+      ;[1047,1319,1568].forEach((freq,i) => {
+        const osc = ctx.createOscillator(); const gain = ctx.createGain()
+        osc.connect(gain); gain.connect(ctx.destination)
+        osc.frequency.value = freq; osc.type = 'sine'
+        gain.gain.setValueAtTime(0.7, ctx.currentTime+i*0.15)
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+i*0.15+0.6)
+        osc.start(ctx.currentTime+i*0.15); osc.stop(ctx.currentTime+i*0.15+0.7)
+      })
+    } catch(e) {}
+    if (navigator.vibrate) navigator.vibrate([200,100,200])
+  }, [])
 
   const loadCommandes = useCallback(async () => {
     const { data: actives } = await supabase
@@ -85,7 +110,8 @@ export default function AccueilPage() {
   const caJour = toutesAujourdhui.reduce((s, c) => s + (c.montant_total || 0), 0)
 
   const platActif = PLATS.find(p => p.id === platSelId)
-  const platsCategorie = PLATS_SORTED.filter(p => p.categorie === catActive)
+  const customCat = menuCustom.filter(p => p.categorie === catActive)
+  const platsCategorie = [...PLATS_SORTED.filter(p => p.categorie === catActive), ...customCat].sort((a,b) => a.nom.localeCompare(b.nom,'fr'))
   const catInfo = CATEGORIES.find(c => c.id === catActive)
 
   const ajouterLigne = () => {
