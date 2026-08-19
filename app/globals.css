@@ -95,3 +95,14 @@ button { font-family: var(--font-body); cursor: pointer; border: none; transitio
 .total-amount { font-family: var(--font-display); font-size: 2rem; color: var(--gold); letter-spacing: 2px; }
 .field-label { font-size: 0.68rem; letter-spacing: 2px; color: var(--text2); text-transform: uppercase; margin-bottom: 6px; display: block; }
 @media (max-width: 600px) { .header-brand { font-size: 1.2rem; } .stat-item { padding: 8px 14px; min-width: 70px; } .alarm-banner { padding: 20px 28px; } }
+
+@media print {
+  * { -webkit-print-color-adjust: exact !important; color-adjust: exact !important; }
+  body > * { display: none !important; }
+  #facture-print-wrapper { display: block !important; position: fixed; inset: 0; background: white; z-index: 99999; padding: 20px; }
+  #facture-print-wrapper * { color: #000 !important; background: white !important; border-color: #ccc !important; font-family: Arial, sans-serif !important; }
+  #facture-print-wrapper .facture-nom { color: #CC1414 !important; }
+  #facture-print-wrapper .facture-total { color: #b8860b !important; font-size: 1.8rem !important; }
+  #facture-print-wrapper .facture-item-total { color: #b8860b !important; font-weight: bold !important; }
+  #facture-print-wrapper .no-print { display: none !important; }
+}
