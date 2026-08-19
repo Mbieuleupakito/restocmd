@@ -66,3 +66,17 @@ ALTER PUBLICATION supabase_realtime ADD TABLE lignes_commande;
 ALTER TABLE commandes DISABLE ROW LEVEL SECURITY;
 ALTER TABLE lignes_commande DISABLE ROW LEVEL SECURITY;
 ALTER TABLE historique_journalier DISABLE ROW LEVEL SECURITY;
+
+-- ── MENU CUSTOM (plats ajoutés depuis l'app) ─────────────
+CREATE TABLE IF NOT EXISTS menu_custom (
+  id          BIGSERIAL PRIMARY KEY,
+  categorie   TEXT NOT NULL DEFAULT 'plats',
+  nom         TEXT NOT NULL,
+  prix        NUMERIC(8,2) NOT NULL,
+  prix2       NUMERIC(8,2),
+  complement  BOOLEAN DEFAULT FALSE,
+  disponible  BOOLEAN DEFAULT TRUE,
+  destination TEXT DEFAULT 'cuisine' CHECK(destination IN ('cuisine','accueil')),
+  created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE menu_custom DISABLE ROW LEVEL SECURITY;
