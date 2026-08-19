@@ -78,6 +78,25 @@ export default function AdminPage() {
     setTimeout(() => setMsg(''), 3000)
   }
 
+  const [editPlat, setEditPlat] = useState<any>(null)
+
+  const saveEdit = async () => {
+    if (!editPlat) return
+    const { error } = await supabase.from('menu_custom').update({
+      nom: editPlat.nom,
+      prix: Number(editPlat.prix),
+      prix2: editPlat.prix2 ? Number(editPlat.prix2) : null,
+      complement: editPlat.complement,
+      categorie: editPlat.categorie,
+      destination: CATEGORIES.find(c => c.id === editPlat.categorie)?.destination || 'cuisine'
+    }).eq('id', editPlat.id)
+    if (error) { setMsg('❌ Erreur: ' + error.message); return }
+    setMsg('✅ Plat modifié !')
+    setEditPlat(null)
+    loadMenuCustom()
+    setTimeout(() => setMsg(''), 3000)
+  }
+
   const toggleDispo = async (id: number, disponible: boolean) => {
     await supabase.from('menu_custom').update({ disponible: !disponible }).eq('id', id)
     loadMenuCustom()
@@ -153,6 +172,7 @@ export default function AdminPage() {
                     </div>
                     <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
                       <span style={{fontFamily:'var(--font-display)',color:'var(--gold)'}}>{p.prix}€{p.prix2?` / ${p.prix2}€`:''}</span>
+                      <button onClick={()=>setEditPlat({...p})} style={{fontSize:'0.7rem',padding:'3px 10px',borderRadius:'20px',border:'1px solid var(--blue)',background:'transparent',color:'var(--blue)',cursor:'pointer'}}>✏️ Modifier</button>
                       <button onClick={()=>toggleDispo(p.id,p.disponible)} style={{fontSize:'0.7rem',padding:'3px 10px',borderRadius:'20px',border:`1px solid ${p.disponible?'var(--green)':'var(--border)'}`,background:'transparent',color:p.disponible?'var(--green)':'var(--text3)',cursor:'pointer'}}>
                         {p.disponible?'✓ Dispo':'✗ Indispo'}
                       </button>
@@ -160,6 +180,44 @@ export default function AdminPage() {
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* MODAL MODIFICATION */}
+            {editPlat && (
+              <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&setEditPlat(null)}>
+                <div className="modal" style={{maxWidth:'460px'}}>
+                  <div className="modal-header">
+                    <span className="modal-title">✏️ MODIFIER LE PLAT</span>
+                    <button className="btn-ghost" onClick={()=>setEditPlat(null)}>✕</button>
+                  </div>
+                  <div className="modal-body">
+                    <label className="field-label">Nom</label>
+                    <input value={editPlat.nom} onChange={e=>setEditPlat((p:any)=>({...p,nom:e.target.value}))} style={{marginBottom:'10px'}}/>
+                    <label className="field-label">Catégorie</label>
+                    <select value={editPlat.categorie} onChange={e=>setEditPlat((p:any)=>({...p,categorie:e.target.value}))} style={{marginBottom:'10px'}}>
+                      {CATEGORIES.map(c=><option key={c.id} value={c.id}>{c.emoji} {c.nom} ({c.destination})</option>)}
+                    </select>
+                    <div style={{display:'flex',gap:'10px',marginBottom:'10px'}}>
+                      <div style={{flex:1}}>
+                        <label className="field-label">Prix (€)</label>
+                        <input type="number" value={editPlat.prix} onChange={e=>setEditPlat((p:any)=>({...p,prix:e.target.value}))}/>
+                      </div>
+                      <div style={{flex:1}}>
+                        <label className="field-label">Prix 2 (optionnel)</label>
+                        <input type="number" value={editPlat.prix2||''} onChange={e=>setEditPlat((p:any)=>({...p,prix2:e.target.value}))}/>
+                      </div>
+                    </div>
+                    <label style={{display:'flex',alignItems:'center',gap:'8px',fontSize:'0.85rem',cursor:'pointer',marginBottom:'16px'}}>
+                      <input type="checkbox" checked={editPlat.complement} onChange={e=>setEditPlat((p:any)=>({...p,complement:e.target.checked}))} style={{width:'auto'}}/>
+                      A des compléments
+                    </label>
+                    <div style={{display:'flex',gap:'10px'}}>
+                      <button className="btn-ghost" onClick={()=>setEditPlat(null)} style={{flex:1}}>Annuler</button>
+                      <button className="btn-primary" onClick={saveEdit} style={{flex:2}}>✅ Enregistrer</button>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 
