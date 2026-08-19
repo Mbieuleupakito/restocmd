@@ -2,15 +2,26 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { CATEGORIES, PLATS, COMPLEMENTS, RESTAURANT } from '@/lib/menu'
+import { COMPLEMENTS, RESTAURANT } from '@/lib/menu'
+
+const CATEGORIES = [
+  { id: 'plats',      nom: 'Plats',      destination: 'cuisine', emoji: '🍛' },
+  { id: 'bieres',     nom: 'Bières',     destination: 'accueil', emoji: '🍺' },
+  { id: 'vins',       nom: 'Vins',       destination: 'accueil', emoji: '🍷' },
+  { id: 'sodas',      nom: 'Sodas',      destination: 'accueil', emoji: '🥤' },
+  { id: 'champagnes', nom: 'Champagnes', destination: 'accueil', emoji: '🍾' },
+  { id: 'whiskys',    nom: 'Whiskys',    destination: 'accueil', emoji: '🥃' },
+  { id: 'formules',   nom: 'Formules',   destination: 'accueil', emoji: '🎯' },
+]
 
 type Source = 'Présentiel' | 'À emporter' | 'Deliveroo' | 'Uber Eats'
 type Statut = 'nouvelle' | 'en_preparation' | 'prete' | 'servie'
 
 interface Ligne {
-  id?: number; plat_id: number | null; nom_plat: string; complement_id: number | null
-  complement_nom: string | null; quantite: number; prix_unitaire: number
-  remarque: string; sous_total: number; destination: string
+  id?: number; plat_id: number | null; nom_plat: string
+  complement_id: number | null; complement_nom: string | null
+  quantite: number; prix_unitaire: number; remarque: string
+  sous_total: number; destination: string
 }
 interface Commande {
   id: number; source: Source; table_ref: string; statut: Statut
@@ -18,12 +29,12 @@ interface Commande {
 }
 
 const SOURCES: Source[] = ['Présentiel', 'À emporter', 'Deliveroo', 'Uber Eats']
-const PLATS_SORTED = [...PLATS].sort((a, b) => a.nom.localeCompare(b.nom, 'fr'))
 
 export default function AccueilPage() {
   const router = useRouter()
   const [commandes, setCommandes] = useState<Commande[]>([])
   const [servies, setServies] = useState<Commande[]>([])
+  const [menuDB, setMenuDB] = useState<any[]>([])
   const [showForm, setShowForm] = useState(false)
   const [editCmd, setEditCmd] = useState<Commande | null>(null)
   const [source, setSource] = useState<Source>('Présentiel')
@@ -34,28 +45,23 @@ export default function AccueilPage() {
   const [complementId, setComplementId] = useState<number | null>(null)
   const [quantite, setQuantite] = useState(1)
   const [remarque, setRemarque] = useState('')
-  const [prixChoisi, setPrixChoisi] = useState<number>(0)
-  const [nomManuel, setNomManuel] = useState('')
-  const [prixManuel, setPrixManuel] = useState('')
-  const [modeManuel, setModeManuel] = useState(false)
-  const [destManuel, setDestManuel] = useState<'cuisine'|'accueil'>('cuisine')
+  const [portionChoisie, setPortionChoisie] = useState<'demi'|'entier'>('entier')
   const [notes, setNotes] = useState('')
   const [showFacture, setShowFacture] = useState<Commande | null>(null)
   const [loading, setLoading] = useState(false)
-  const [menuCustom, setMenuCustom] = useState<any[]>([])
-
-  useEffect(() => {
-    supabase.from('menu_custom').select('*').eq('disponible', true).order('nom').then(({ data }) => {
-      if (data) setMenuCustom(data)
-    })
-  }, [])
   const [showServies, setShowServies] = useState(false)
-  const [showAddMenu, setShowAddMenu] = useState(false)
-  const [newPlat, setNewPlat] = useState({ nom: '', categorie: 'plats', prix: '', prix2: '', complement: false })
-  const [menuMsg, setMenuMsg] = useState('')
-
+  const [modeManuel, setModeManuel] = useState(false)
+  const [nomManuel, setNomManuel] = useState('')
+  const [prixManuel, setPrixManuel] = useState('')
+  const [destManuel, setDestManuel] = useState<'cuisine'|'accueil'>('cuisine')
   const [pretNotif, setPretNotif] = useState<number[]>([])
   const prevStatuts = useRef<Record<number,string>>({})
+
+  // Charger menu depuis Supabase
+  useEffect(() => {
+    supabase.from('menu').select('*').eq('disponible', true).order('nom')
+      .then(({ data }) => { if (data) setMenuDB(data) })
+  }, [])
 
   const playPretSound = useCallback(() => {
     try {
@@ -89,30 +95,41 @@ export default function AccueilPage() {
         lignesMap[l.commande_id].push(l)
       })
     }
-    setCommandes((actives||[]).map((c:any) => ({ ...c, lignes: lignesMap[c.id]||[] })))
+
+    const newActives = (actives||[]).map((c:any) => ({ ...c, lignes: lignesMap[c.id]||[] }))
+    const nouvellesPretes = newActives.filter(c => c.statut === 'prete' && prevStatuts.current[c.id] && prevStatuts.current[c.id] !== 'prete')
+    if (nouvellesPretes.length > 0) {
+      setPretNotif(nouvellesPretes.map(c => c.id))
+      playPretSound()
+      setTimeout(() => setPretNotif([]), 5000)
+    }
+    newActives.forEach(c => { prevStatuts.current[c.id] = c.statut })
+    setCommandes(newActives)
     setServies((done||[]).map((c:any) => ({ ...c, lignes: lignesMap[c.id]||[] })))
-  }, [])
+  }, [playPretSound])
 
   useEffect(() => {
     loadCommandes()
-    const ch = supabase.channel('accueil-v2')
+    const ch = supabase.channel('accueil-v3')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'commandes' }, loadCommandes)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'lignes_commande' }, loadCommandes)
       .subscribe()
     return () => { supabase.removeChannel(ch) }
   }, [loadCommandes])
 
-  // Stats incluant les servies du jour
   const today = new Date().toDateString()
-  const toutesAujourdhui = [...commandes, ...servies].filter(c =>
-    new Date(c.heure_creation).toDateString() === today
-  )
+  const toutesAujourdhui = [...commandes, ...servies].filter(c => new Date(c.heure_creation).toDateString() === today)
   const caJour = toutesAujourdhui.reduce((s, c) => s + (c.montant_total || 0), 0)
 
-  const platActif = PLATS.find(p => p.id === platSelId)
-  const customCat = menuCustom.filter(p => p.categorie === catActive)
-  const platsCategorie = [...PLATS_SORTED.filter(p => p.categorie === catActive), ...customCat].sort((a,b) => a.nom.localeCompare(b.nom,'fr'))
+  const platActif = menuDB.find(p => p.id === platSelId)
+  const platsCategorie = menuDB.filter(p => p.categorie === catActive)
   const catInfo = CATEGORIES.find(c => c.id === catActive)
+
+  const getPrix = () => {
+    if (!platActif) return 0
+    if (platActif.a_demi_plat && portionChoisie === 'demi') return Number(platActif.prix_demi)
+    return Number(platActif.prix_entier)
+  }
 
   const ajouterLigne = () => {
     if (modeManuel) {
@@ -125,17 +142,18 @@ export default function AccueilPage() {
       setNomManuel(''); setPrixManuel(''); setQuantite(1); setRemarque('')
     } else {
       if (!platActif) return
-      const prix = prixChoisi || platActif.prix
+      const prix = getPrix()
       const comp = COMPLEMENTS.find(c => c.id === complementId)
       const prixFinal = prix + (comp?.prix_supplement || 0)
+      const nomPortion = platActif.a_demi_plat ? (portionChoisie === 'demi' ? ' (demi-plat)' : ' (plat entier)') : ''
       setPanier(p => [...p, {
-        plat_id: platActif.id, nom_plat: platActif.nom,
+        plat_id: platActif.id, nom_plat: platActif.nom + nomPortion,
         complement_id: complementId, complement_nom: comp?.nom || null,
         quantite, prix_unitaire: prixFinal, remarque,
         sous_total: quantite * prixFinal,
         destination: (catInfo?.destination || 'cuisine') as 'cuisine' | 'accueil'
       }])
-      setPlatSelId(null); setComplementId(null); setQuantite(1); setRemarque(''); setPrixChoisi(0)
+      setPlatSelId(null); setComplementId(null); setQuantite(1); setRemarque(''); setPortionChoisie('entier')
     }
   }
 
@@ -143,11 +161,8 @@ export default function AccueilPage() {
 
   const ouvrirForm = (cmd?: Commande) => {
     if (cmd) {
-      setEditCmd(cmd)
-      setSource(cmd.source)
-      setTableRef(cmd.table_ref || '')
-      setNotes(cmd.notes || '')
-      setPanier(cmd.lignes.map(l => ({ ...l })))
+      setEditCmd(cmd); setSource(cmd.source); setTableRef(cmd.table_ref || '')
+      setNotes(cmd.notes || ''); setPanier(cmd.lignes.map(l => ({ ...l })))
     } else {
       setEditCmd(null); setSource('Présentiel'); setTableRef(''); setNotes(''); setPanier([])
     }
@@ -159,30 +174,13 @@ export default function AccueilPage() {
     setLoading(true)
     try {
       if (editCmd) {
-        // Modifier commande existante
-        await supabase.from('commandes').update({
-          source, table_ref: tableRef, montant_total: totalPanier, notes,
-          heure_modif: new Date().toISOString()
-        }).eq('id', editCmd.id)
+        await supabase.from('commandes').update({ source, table_ref: tableRef, montant_total: totalPanier, notes, heure_modif: new Date().toISOString() }).eq('id', editCmd.id)
         await supabase.from('lignes_commande').delete().eq('commande_id', editCmd.id)
-        await supabase.from('lignes_commande').insert(panier.map(l => ({
-          commande_id: editCmd.id, plat_id: l.plat_id, nom_plat: l.nom_plat,
-          complement_id: l.complement_id, complement_nom: l.complement_nom,
-          quantite: l.quantite, prix_unitaire: l.prix_unitaire,
-          remarque: l.remarque, sous_total: l.sous_total, destination: l.destination
-        })))
+        await supabase.from('lignes_commande').insert(panier.map(l => ({ commande_id: editCmd.id, plat_id: l.plat_id, nom_plat: l.nom_plat, complement_id: l.complement_id, complement_nom: l.complement_nom, quantite: l.quantite, prix_unitaire: l.prix_unitaire, remarque: l.remarque, sous_total: l.sous_total, destination: l.destination })))
       } else {
-        // Nouvelle commande
-        const { data: cmd } = await supabase.from('commandes').insert({
-          source, table_ref: tableRef, statut: 'nouvelle', montant_total: totalPanier, notes
-        }).select().single()
+        const { data: cmd } = await supabase.from('commandes').insert({ source, table_ref: tableRef, statut: 'nouvelle', montant_total: totalPanier, notes }).select().single()
         if (!cmd) return
-        await supabase.from('lignes_commande').insert(panier.map(l => ({
-          commande_id: cmd.id, plat_id: l.plat_id, nom_plat: l.nom_plat,
-          complement_id: l.complement_id, complement_nom: l.complement_nom,
-          quantite: l.quantite, prix_unitaire: l.prix_unitaire,
-          remarque: l.remarque, sous_total: l.sous_total, destination: l.destination
-        })))
+        await supabase.from('lignes_commande').insert(panier.map(l => ({ commande_id: cmd.id, plat_id: l.plat_id, nom_plat: l.nom_plat, complement_id: l.complement_id, complement_nom: l.complement_nom, quantite: l.quantite, prix_unitaire: l.prix_unitaire, remarque: l.remarque, sous_total: l.sous_total, destination: l.destination })))
       }
       setShowForm(false); setEditCmd(null); setPanier([]); loadCommandes()
     } finally { setLoading(false) }
@@ -200,13 +198,6 @@ export default function AccueilPage() {
     loadCommandes()
   }
 
-  const ajouterPlat = () => {
-    if (!newPlat.nom || !newPlat.prix) return
-    setMenuMsg('✅ Plat ajouté ! Visible immédiatement. Pour le rendre permanent, contactez le développeur.')
-    setNewPlat({ nom: '', categorie: 'plats', prix: '', prix2: '', complement: false })
-    setTimeout(() => setMenuMsg(''), 4000)
-  }
-
   const stats = {
     nouvelles: commandes.filter(c => c.statut === 'nouvelle').length,
     prep: commandes.filter(c => c.statut === 'en_preparation').length,
@@ -222,13 +213,18 @@ export default function AccueilPage() {
           <span className="badge badge-red">ACCUEIL</span>
         </div>
         <div className="header-right">
-          <button className="btn-ghost" style={{fontSize:'0.75rem'}} onClick={() => setShowAddMenu(true)}>+ Menu</button>
+          <button className="btn-ghost" style={{fontSize:'0.75rem'}} onClick={() => router.push('/admin')}>⚙️</button>
           <button className="btn-ghost" onClick={() => router.push('/historique')}>📊</button>
           <button className="btn-ghost" onClick={() => router.push('/')}>←</button>
         </div>
       </header>
 
-      {/* STATS */}
+      {pretNotif.length > 0 && (
+        <div onClick={() => setPretNotif([])} style={{ background:'var(--green)', color:'#000', padding:'14px 20px', fontSize:'1rem', fontWeight:700, textAlign:'center', cursor:'pointer', letterSpacing:'1px', borderBottom:'3px solid #16a34a' }}>
+          ✅ PLAT PRÊT — #{pretNotif.map(id => String(id).padStart(3,'0')).join(', #')} — Allez récupérer !
+        </div>
+      )}
+
       <div className="stat-bar">
         <div className="stat-item"><div className="stat-num" style={{color:'var(--red)'}}>{stats.nouvelles}</div><div className="stat-lbl">Nouvelles</div></div>
         <div className="stat-item"><div className="stat-num" style={{color:'var(--yellow)'}}>{stats.prep}</div><div className="stat-lbl">En prép.</div></div>
@@ -239,25 +235,15 @@ export default function AccueilPage() {
         </div>
       </div>
 
-      {/* LISTE */}
       <div style={{ flex:1, overflowY:'auto', padding:'16px' }}>
         {commandes.length === 0 ? (
           <div className="empty-state"><span className="emoji">📋</span><p>Aucune commande active</p></div>
         ) : (
           <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
-            {commandes.map(cmd => (
-              <CommandeCard key={cmd.id} cmd={cmd}
-                onStatut={changerStatut}
-                onEdit={() => ouvrirForm(cmd)}
-                onDelete={() => supprimerCommande(cmd.id)}
-                onFacture={() => setShowFacture(cmd)}
-              />
-            ))}
+            {commandes.map(cmd => <CommandeCard key={cmd.id} cmd={cmd} onStatut={changerStatut} onEdit={() => ouvrirForm(cmd)} onDelete={() => supprimerCommande(cmd.id)} onFacture={() => setShowFacture(cmd)} />)}
           </div>
         )}
-
-        {/* COMMANDES SERVIES */}
-        <div style={{ marginTop:'20px' }}>
+        <div style={{ marginTop:'16px' }}>
           <button onClick={() => setShowServies(s => !s)} style={{ background:'transparent', border:'1px solid var(--border)', color:'var(--text2)', borderRadius:'var(--radius)', padding:'8px 16px', fontSize:'0.8rem', width:'100%', cursor:'pointer' }}>
             {showServies ? '▲' : '▼'} Commandes servies aujourd'hui ({servies.filter(c => new Date(c.heure_creation).toDateString()===today).length})
           </button>
@@ -267,16 +253,14 @@ export default function AccueilPage() {
         </div>
       </div>
 
-      {/* MODAL COMMANDE */}
       {showForm && (
         <div className="modal-overlay" onClick={e => e.target===e.currentTarget && setShowForm(false)}>
           <div className="modal" style={{maxWidth:'620px'}}>
             <div className="modal-header">
-              <span className="modal-title">{editCmd ? `MODIFIER #${editCmd.id}` : 'NOUVELLE COMMANDE'}</span>
+              <span className="modal-title">{editCmd ? `MODIFIER #${String(editCmd.id).padStart(3,'0')}` : 'NOUVELLE COMMANDE'}</span>
               <button className="btn-ghost" onClick={() => setShowForm(false)}>✕</button>
             </div>
             <div className="modal-body">
-              {/* SOURCE */}
               <label className="field-label">Source</label>
               <div style={{display:'flex',gap:'8px',flexWrap:'wrap',marginBottom:'14px'}}>
                 {SOURCES.map(s => (
@@ -287,9 +271,8 @@ export default function AccueilPage() {
               <label className="field-label">Table / N° référence</label>
               <input value={tableRef} onChange={e=>setTableRef(e.target.value)} placeholder="Table 3 / #1234" style={{marginBottom:'14px'}}/>
 
-              {/* MODE SAISIE */}
               <div style={{display:'flex',gap:'8px',marginBottom:'12px'}}>
-                <button onClick={()=>setModeManuel(false)} className={modeManuel?'btn-ghost':'btn-secondary'} style={{flex:1,fontSize:'0.8rem'}}>📋 Menu</button>
+                <button onClick={()=>setModeManuel(false)} className={!modeManuel?'btn-secondary':'btn-ghost'} style={{flex:1,fontSize:'0.8rem'}}>📋 Menu</button>
                 <button onClick={()=>setModeManuel(true)} className={modeManuel?'btn-secondary':'btn-ghost'} style={{flex:1,fontSize:'0.8rem'}}>✏️ Saisie libre</button>
               </div>
 
@@ -297,21 +280,35 @@ export default function AccueilPage() {
                 <>
                   <div className="tabs" style={{marginBottom:'10px'}}>
                     {CATEGORIES.map(cat => (
-                      <button key={cat.id} className={`tab ${catActive===cat.id?'active':''}`} onClick={()=>{setCatActive(cat.id);setPlatSelId(null)}}>
+                      <button key={cat.id} className={`tab ${catActive===cat.id?'active':''}`} onClick={()=>{setCatActive(cat.id);setPlatSelId(null);setPortionChoisie('entier')}}>
                         {cat.emoji} {cat.nom}
                       </button>
                     ))}
                   </div>
-                  <select value={platSelId||''} onChange={e=>{const id=Number(e.target.value);setPlatSelId(id);setComplementId(null);setPrixChoisi(PLATS.find(x=>x.id===id)?.prix||0)}} style={{marginBottom:'10px'}}>
-                    <option value="">— Sélectionner un plat —</option>
-                    {platsCategorie.map(p=><option key={p.id} value={p.id}>{p.nom} — {p.prix}€{p.prix2?` / ${p.prix2}€`:''}</option>)}
+
+                  <select value={platSelId||''} onChange={e=>{setPlatSelId(Number(e.target.value)||null);setComplementId(null);setPortionChoisie('entier')}} style={{marginBottom:'10px'}}>
+                    <option value="">— Sélectionner —</option>
+                    {platsCategorie.map(p=>(
+                      <option key={p.id} value={p.id}>
+                        {p.nom} — {p.a_demi_plat ? `${p.prix_demi}€ / ${p.prix_entier}€` : `${p.prix_entier}€`}
+                      </option>
+                    ))}
                   </select>
-                  {platActif?.prix2 && (
-                    <div style={{display:'flex',gap:'8px',marginBottom:'10px'}}>
-                      <button onClick={()=>setPrixChoisi(platActif.prix)} style={{flex:1,padding:'8px',borderRadius:'var(--radius)',border:`2px solid ${prixChoisi===platActif.prix?'var(--red)':'var(--border)'}`,background:prixChoisi===platActif.prix?'var(--red-soft)':'transparent',color:'var(--text)',fontSize:'0.82rem'}}>Petit — {platActif.prix}€</button>
-                      <button onClick={()=>setPrixChoisi(platActif.prix2!)} style={{flex:1,padding:'8px',borderRadius:'var(--radius)',border:`2px solid ${prixChoisi===platActif.prix2?'var(--red)':'var(--border)'}`,background:prixChoisi===platActif.prix2?'var(--red-soft)':'transparent',color:'var(--text)',fontSize:'0.82rem'}}>Grand — {platActif.prix2}€</button>
+
+                  {platActif?.a_demi_plat && (
+                    <div style={{marginBottom:'10px'}}>
+                      <label className="field-label">Portion</label>
+                      <div style={{display:'flex',gap:'8px'}}>
+                        <button onClick={()=>setPortionChoisie('demi')} style={{flex:1,padding:'10px',borderRadius:'var(--radius)',border:`2px solid ${portionChoisie==='demi'?'var(--red)':'var(--border)'}`,background:portionChoisie==='demi'?'var(--red-soft)':'transparent',color:'var(--text)',fontSize:'0.88rem',fontWeight:600}}>
+                          🍽️ Demi-plat — {platActif.prix_demi}€
+                        </button>
+                        <button onClick={()=>setPortionChoisie('entier')} style={{flex:1,padding:'10px',borderRadius:'var(--radius)',border:`2px solid ${portionChoisie==='entier'?'var(--red)':'var(--border)'}`,background:portionChoisie==='entier'?'var(--red-soft)':'transparent',color:'var(--text)',fontSize:'0.88rem',fontWeight:600}}>
+                          🍛 Plat entier — {platActif.prix_entier}€
+                        </button>
+                      </div>
                     </div>
                   )}
+
                   {platActif?.complement && (
                     <select value={complementId||''} onChange={e=>setComplementId(Number(e.target.value)||null)} style={{marginBottom:'10px'}}>
                       <option value="">Sans complément</option>
@@ -321,7 +318,7 @@ export default function AccueilPage() {
                 </>
               ) : (
                 <div style={{display:'flex',flexDirection:'column',gap:'8px',marginBottom:'10px'}}>
-                  <input value={nomManuel} onChange={e=>setNomManuel(e.target.value)} placeholder="Nom du plat / article" />
+                  <input value={nomManuel} onChange={e=>setNomManuel(e.target.value)} placeholder="Nom du plat / article"/>
                   <div style={{display:'flex',gap:'8px'}}>
                     <input type="number" value={prixManuel} onChange={e=>setPrixManuel(e.target.value)} placeholder="Prix (€)" style={{flex:1}}/>
                     <select value={destManuel} onChange={e=>setDestManuel(e.target.value as any)} style={{flex:1}}>
@@ -351,7 +348,6 @@ export default function AccueilPage() {
                 ➕ Ajouter au panier
               </button>
 
-              {/* PANIER */}
               {panier.length > 0 && (
                 <div style={{background:'var(--surface2)',borderRadius:'var(--radius)',padding:'12px',marginBottom:'14px'}}>
                   <div style={{fontFamily:'var(--font-display)',fontSize:'1rem',letterSpacing:'2px',marginBottom:'10px',display:'flex',justifyContent:'space-between'}}>
@@ -388,39 +384,6 @@ export default function AccueilPage() {
         </div>
       )}
 
-      {/* MODAL AJOUTER AU MENU */}
-      {showAddMenu && (
-        <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&setShowAddMenu(false)}>
-          <div className="modal" style={{maxWidth:'460px'}}>
-            <div className="modal-header">
-              <span className="modal-title">➕ AJOUTER AU MENU</span>
-              <button className="btn-ghost" onClick={()=>setShowAddMenu(false)}>✕</button>
-            </div>
-            <div className="modal-body">
-              {menuMsg && <div style={{background:'var(--green-soft)',color:'var(--green)',padding:'10px',borderRadius:'var(--radius)',marginBottom:'14px',fontSize:'0.85rem'}}>{menuMsg}</div>}
-              <label className="field-label">Nom du plat / boisson</label>
-              <input value={newPlat.nom} onChange={e=>setNewPlat(p=>({...p,nom:e.target.value}))} placeholder="Ex: Ndolé Royal" style={{marginBottom:'10px'}}/>
-              <label className="field-label">Catégorie</label>
-              <select value={newPlat.categorie} onChange={e=>setNewPlat(p=>({...p,categorie:e.target.value}))} style={{marginBottom:'10px'}}>
-                {CATEGORIES.map(c=><option key={c.id} value={c.id}>{c.emoji} {c.nom}</option>)}
-              </select>
-              <div style={{display:'flex',gap:'10px',marginBottom:'10px'}}>
-                <div style={{flex:1}}><label className="field-label">Prix (€)</label><input type="number" value={newPlat.prix} onChange={e=>setNewPlat(p=>({...p,prix:e.target.value}))} placeholder="20"/></div>
-                <div style={{flex:1}}><label className="field-label">Prix 2 (optionnel)</label><input type="number" value={newPlat.prix2} onChange={e=>setNewPlat(p=>({...p,prix2:e.target.value}))} placeholder="25"/></div>
-              </div>
-              <label style={{display:'flex',alignItems:'center',gap:'8px',fontSize:'0.85rem',cursor:'pointer',marginBottom:'16px'}}>
-                <input type="checkbox" checked={newPlat.complement} onChange={e=>setNewPlat(p=>({...p,complement:e.target.checked}))} style={{width:'auto'}}/>
-                A des compléments (bobolo, aloco...)
-              </label>
-              <div style={{background:'var(--yellow-soft)',border:'1px solid var(--yellow)',borderRadius:'var(--radius)',padding:'10px',fontSize:'0.78rem',color:'var(--yellow)',marginBottom:'14px'}}>
-                ⚠️ Ce plat sera visible pour cette session. Pour l'ajouter définitivement, contactez le développeur (Honoré).
-              </div>
-              <button className="btn-primary" onClick={ajouterPlat} style={{width:'100%'}}>➕ Ajouter</button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {showFacture && <FactureModal cmd={showFacture} onClose={()=>setShowFacture(null)}/>}
     </div>
   )
@@ -429,11 +392,10 @@ export default function AccueilPage() {
 function CommandeCard({cmd,onStatut,onEdit,onDelete,onFacture}:{cmd:Commande;onStatut:(id:number,s:Statut)=>void;onEdit:()=>void;onDelete:()=>void;onFacture:()=>void}) {
   const [open,setOpen]=useState(cmd.statut!=='servie')
   const heure=new Date(cmd.heure_creation).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})
+  const elapsed=Math.floor((Date.now()-new Date(cmd.heure_creation).getTime())/60000)
   const plats=(cmd.lignes||[]).filter((l:any)=>l.destination==='cuisine')
   const boissons=(cmd.lignes||[]).filter((l:any)=>l.destination==='accueil')
   const srcClass=cmd.source==='Deliveroo'?'source-deliveroo':cmd.source==='Uber Eats'?'source-ubereats':cmd.source==='À emporter'?'source-emporter':'source-presentiel'
-  const elapsed=Math.floor((Date.now()-new Date(cmd.heure_creation).getTime())/60000)
-
   return (
     <div className={`commande-card ${cmd.statut}`} style={{opacity:cmd.statut==='servie'?0.6:1}}>
       <div style={{padding:'12px 16px',display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer'}} onClick={()=>setOpen(o=>!o)}>
@@ -441,7 +403,7 @@ function CommandeCard({cmd,onStatut,onEdit,onDelete,onFacture}:{cmd:Commande;onS
           <span style={{fontFamily:'var(--font-display)',fontSize:'1.3rem',color:cmd.statut==='nouvelle'?'var(--red)':cmd.statut==='en_preparation'?'var(--yellow)':cmd.statut==='prete'?'var(--green)':'var(--text2)'}}>#{String(cmd.id).padStart(3,'0')}</span>
           <span className={`source-tag ${srcClass}`}>{cmd.source}</span>
           {cmd.table_ref&&<span style={{fontSize:'0.8rem',color:'var(--text2)'}}>{cmd.table_ref}</span>}
-          <span style={{fontSize:'0.7rem',color:elapsed>20&&cmd.statut!=='servie'&&cmd.statut!=='prete'?'var(--red)':'var(--text3)'}}>{elapsed}min</span>
+          <span style={{fontSize:'0.7rem',color:elapsed>20&&cmd.statut!=='servie'?'var(--red)':'var(--text3)'}}>{elapsed}min</span>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
           <span style={{fontFamily:'var(--font-display)',fontSize:'1.2rem',color:'var(--gold)'}}>{cmd.montant_total}€</span>
@@ -450,45 +412,17 @@ function CommandeCard({cmd,onStatut,onEdit,onDelete,onFacture}:{cmd:Commande;onS
           <span style={{color:'var(--text3)'}}>{open?'▲':'▼'}</span>
         </div>
       </div>
-
       {open&&(
         <div style={{borderTop:'1px solid var(--border)',padding:'10px 16px'}}>
-          {plats.length>0&&(
-            <div style={{marginBottom:'8px'}}>
-              <div style={{fontSize:'0.62rem',color:'var(--red)',letterSpacing:'2px',marginBottom:'6px'}}>🍛 PLATS — CUISINE</div>
-              {plats.map((l:any,i:number)=>(
-                <div key={i} style={{padding:'6px 0',borderBottom:'1px solid var(--surface2)',display:'flex',alignItems:'center',gap:'10px'}}>
-                  <span style={{fontFamily:'var(--font-display)',fontSize:'1.5rem',color:'var(--red)',minWidth:'30px'}}>{l.quantite}×</span>
-                  <div style={{flex:1}}>
-                    <div style={{fontWeight:700,fontSize:'0.95rem'}}>{l.nom_plat||l.nom}</div>
-                    {l.complement_nom&&<div style={{fontSize:'0.78rem',color:'var(--gold)'}}>↳ {l.complement_nom}</div>}
-                    {l.remarque&&<div style={{fontSize:'0.74rem',color:'var(--red)',fontStyle:'italic'}}>⚠ {l.remarque}</div>}
-                  </div>
-                  <span style={{color:'var(--gold)',fontWeight:700,fontSize:'0.9rem'}}>{l.sous_total}€</span>
-                </div>
-              ))}
-            </div>
-          )}
-          {boissons.length>0&&(
-            <div style={{marginBottom:'8px'}}>
-              <div style={{fontSize:'0.62rem',color:'var(--blue)',letterSpacing:'2px',marginBottom:'6px'}}>🥤 BOISSONS — ACCUEIL</div>
-              {boissons.map((l:any,i:number)=>(
-                <div key={i} style={{padding:'5px 0',borderBottom:'1px solid var(--surface2)',display:'flex',alignItems:'center',gap:'10px'}}>
-                  <span style={{fontFamily:'var(--font-display)',fontSize:'1.3rem',color:'var(--blue)',minWidth:'30px'}}>{l.quantite}×</span>
-                  <span style={{flex:1,fontWeight:600,fontSize:'0.9rem'}}>{l.nom_plat||l.nom}</span>
-                  <span style={{color:'var(--gold)',fontWeight:700,fontSize:'0.9rem'}}>{l.sous_total}€</span>
-                </div>
-              ))}
-            </div>
-          )}
-
+          {plats.length>0&&<div style={{marginBottom:'8px'}}><div style={{fontSize:'0.62rem',color:'var(--red)',letterSpacing:'2px',marginBottom:'6px'}}>🍛 PLATS — CUISINE</div>{plats.map((l:any,i:number)=><div key={i} style={{padding:'6px 0',borderBottom:'1px solid var(--surface2)',display:'flex',alignItems:'center',gap:'10px'}}><span style={{fontFamily:'var(--font-display)',fontSize:'1.4rem',color:'var(--red)',minWidth:'30px'}}>{l.quantite}×</span><div style={{flex:1}}><div style={{fontWeight:700,fontSize:'0.95rem'}}>{l.nom_plat}</div>{l.complement_nom&&<div style={{fontSize:'0.78rem',color:'var(--gold)'}}>↳ {l.complement_nom}</div>}{l.remarque&&<div style={{fontSize:'0.74rem',color:'var(--red)',fontStyle:'italic'}}>⚠ {l.remarque}</div>}</div><span style={{color:'var(--gold)',fontWeight:700,fontSize:'0.9rem'}}>{l.sous_total}€</span></div>)}</div>}
+          {boissons.length>0&&<div style={{marginBottom:'8px'}}><div style={{fontSize:'0.62rem',color:'var(--blue)',letterSpacing:'2px',marginBottom:'6px'}}>🥤 BOISSONS — ACCUEIL</div>{boissons.map((l:any,i:number)=><div key={i} style={{padding:'5px 0',borderBottom:'1px solid var(--surface2)',display:'flex',alignItems:'center',gap:'10px'}}><span style={{fontFamily:'var(--font-display)',fontSize:'1.3rem',color:'var(--blue)',minWidth:'30px'}}>{l.quantite}×</span><span style={{flex:1,fontWeight:600,fontSize:'0.9rem'}}>{l.nom_plat}</span><span style={{color:'var(--gold)',fontWeight:700,fontSize:'0.9rem'}}>{l.sous_total}€</span></div>)}</div>}
           <div style={{display:'flex',gap:'6px',marginTop:'10px',flexWrap:'wrap'}}>
             {cmd.statut==='nouvelle'&&<button className="btn-secondary" onClick={()=>onStatut(cmd.id,'en_preparation')} style={{fontSize:'0.75rem',padding:'6px 10px'}}>🔥 En préparation</button>}
             {cmd.statut==='en_preparation'&&<button className="btn-green" onClick={()=>onStatut(cmd.id,'prete')} style={{fontSize:'0.75rem',padding:'6px 10px'}}>✅ Prête</button>}
             {cmd.statut==='prete'&&<button className="btn-primary" onClick={()=>onStatut(cmd.id,'servie')} style={{fontSize:'0.75rem',padding:'6px 10px'}}>📦 Servie</button>}
             {cmd.statut!=='servie'&&<button className="btn-ghost" onClick={onEdit} style={{fontSize:'0.75rem',padding:'6px 10px'}}>✏️ Modifier</button>}
             <button className="btn-ghost" onClick={onFacture} style={{fontSize:'0.75rem',padding:'6px 10px'}}>🧾 Facture</button>
-            <button onClick={onDelete} style={{fontSize:'0.75rem',padding:'6px 10px',background:'transparent',border:'1px solid transparent',color:'var(--text3)',borderRadius:'var(--radius)',cursor:'pointer',marginLeft:'auto'}} onMouseEnter={e=>(e.currentTarget.style.color='var(--red)')} onMouseLeave={e=>(e.currentTarget.style.color='var(--text3)')}>🗑️ Suppr.</button>
+            <button onClick={onDelete} style={{fontSize:'0.75rem',padding:'6px 10px',background:'transparent',border:'1px solid transparent',color:'var(--text3)',borderRadius:'var(--radius)',cursor:'pointer',marginLeft:'auto'}} onMouseEnter={e=>(e.currentTarget.style.color='var(--red)')} onMouseLeave={e=>(e.currentTarget.style.color='var(--text3)')}>🗑️</button>
           </div>
         </div>
       )}
@@ -500,7 +434,6 @@ function FactureModal({cmd,onClose}:{cmd:Commande;onClose:()=>void}) {
   const now=new Date()
   const date=now.toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'})
   const heure=now.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})
-
   const handlePrint = () => {
     const el = document.getElementById('facture-print-wrapper')
     if (!el) return
@@ -510,99 +443,60 @@ function FactureModal({cmd,onClose}:{cmd:Commande;onClose:()=>void}) {
     document.body.innerHTML = original
     window.location.reload()
   }
-
   const S = {
     page: { background:'white', color:'#111', fontFamily:'Arial, sans-serif', padding:'32px', maxWidth:'480px', margin:'0 auto' } as React.CSSProperties,
     header: { textAlign:'center' as const, marginBottom:'20px', paddingBottom:'16px', borderBottom:'2px dashed #ccc' },
-    nom: { fontSize:'2rem', fontWeight:900, color:'#CC1414', letterSpacing:'4px', fontFamily:'Arial Black, Arial, sans-serif' },
-    sub: { fontSize:'0.78rem', color:'#555', marginTop:'4px' },
-    row2: { display:'flex', justifyContent:'space-between', marginBottom:'12px', fontSize:'0.82rem', color:'#333' },
-    thRow: { display:'grid', gridTemplateColumns:'3fr 1fr 1fr 1fr', fontSize:'0.68rem', color:'#888', textTransform:'uppercase' as const, letterSpacing:'1px', marginBottom:'6px', paddingBottom:'4px', borderBottom:'1px solid #ccc' },
-    tdRow: { display:'grid', gridTemplateColumns:'3fr 1fr 1fr 1fr', fontSize:'0.85rem', padding:'6px 0', borderBottom:'1px solid #eee', color:'#222' },
-    totalBox: { marginTop:'12px', padding:'12px', border:'2px solid #CC1414', borderRadius:'6px', display:'flex', justifyContent:'space-between', alignItems:'center' },
-    footer: { textAlign:'center' as const, fontSize:'0.75rem', color:'#666', paddingTop:'14px', borderTop:'2px dashed #ccc', lineHeight:'1.8', marginTop:'14px' },
   }
-
   const factureContent = (
     <div style={S.page}>
       <div style={S.header}>
-        <div style={S.nom}>{RESTAURANT.nom}</div>
-        <div style={S.sub}>{RESTAURANT.adresse} — {RESTAURANT.codePostal} {RESTAURANT.ville}</div>
-        <div style={{...S.sub, fontSize:'0.72rem'}}>Tél: {RESTAURANT.tel} · {RESTAURANT.portable}</div>
-        <div style={{...S.sub, fontSize:'0.7rem'}}>{RESTAURANT.metro}</div>
+        <div style={{fontSize:'2rem',fontWeight:900,color:'#CC1414',letterSpacing:'4px'}}>{RESTAURANT.nom}</div>
+        <div style={{fontSize:'0.78rem',color:'#555',marginTop:'4px'}}>{RESTAURANT.adresse} — {RESTAURANT.codePostal} {RESTAURANT.ville}</div>
+        <div style={{fontSize:'0.72rem',color:'#666'}}>Tél: {RESTAURANT.tel} · {RESTAURANT.portable}</div>
+        <div style={{fontSize:'0.7rem',color:'#888'}}>{RESTAURANT.metro}</div>
       </div>
-
-      <div style={S.row2}>
-        <div>
-          <div style={{color:'#888', fontSize:'0.72rem'}}>N° / Order #</div>
-          <div style={{fontSize:'1.4rem', fontWeight:900}}>#{String(cmd.id).padStart(4,'0')}</div>
-        </div>
-        <div style={{textAlign:'right'}}>
-          <div style={{color:'#888', fontSize:'0.72rem'}}>Date</div>
-          <div style={{fontWeight:600}}>{date}</div>
-          <div style={{color:'#888', fontSize:'0.72rem'}}>{heure}</div>
-        </div>
+      <div style={{display:'flex',justifyContent:'space-between',marginBottom:'14px',fontSize:'0.82rem'}}>
+        <div><div style={{color:'#888',fontSize:'0.72rem'}}>N° / Order #</div><div style={{fontSize:'1.4rem',fontWeight:900}}>#{String(cmd.id).padStart(4,'0')}</div></div>
+        <div style={{textAlign:'right'}}><div style={{color:'#888',fontSize:'0.72rem'}}>Date</div><div style={{fontWeight:600}}>{date}</div><div style={{color:'#888',fontSize:'0.72rem'}}>{heure}</div></div>
       </div>
-
-      {cmd.table_ref && <div style={{fontSize:'0.82rem',marginBottom:'4px',color:'#333'}}><strong>Table / Réf :</strong> {cmd.table_ref}</div>}
-      <div style={{fontSize:'0.82rem',marginBottom:'14px',color:'#333'}}><strong>Source :</strong> {cmd.source}</div>
-
-      <div style={{borderTop:'1px solid #ccc', paddingTop:'10px'}}>
-        <div style={S.thRow}>
-          <span>Article / Item</span>
-          <span style={{textAlign:'center'}}>Qté</span>
-          <span style={{textAlign:'right'}}>Prix</span>
-          <span style={{textAlign:'right'}}>Total</span>
+      {cmd.table_ref&&<div style={{fontSize:'0.82rem',marginBottom:'4px'}}><strong>Table / Réf :</strong> {cmd.table_ref}</div>}
+      <div style={{fontSize:'0.82rem',marginBottom:'14px'}}><strong>Source :</strong> {cmd.source}</div>
+      <div style={{borderTop:'1px solid #ccc',paddingTop:'10px'}}>
+        <div style={{display:'grid',gridTemplateColumns:'3fr 1fr 1fr 1fr',fontSize:'0.68rem',color:'#888',textTransform:'uppercase',letterSpacing:'1px',marginBottom:'6px',paddingBottom:'4px',borderBottom:'1px solid #ccc'}}>
+          <span>Article / Item</span><span style={{textAlign:'center'}}>Qté</span><span style={{textAlign:'right'}}>Prix</span><span style={{textAlign:'right'}}>Total</span>
         </div>
         {(cmd.lignes||[]).map((l:any,i:number)=>(
-          <div key={i} style={S.tdRow}>
-            <div>
-              <div style={{fontWeight:500}}>{l.nom_plat||l.nom}</div>
-              {l.complement_nom&&<div style={{fontSize:'0.72rem',color:'#888'}}>+ {l.complement_nom}</div>}
-              {l.remarque&&<div style={{fontSize:'0.7rem',color:'#999',fontStyle:'italic'}}>{l.remarque}</div>}
-            </div>
+          <div key={i} style={{display:'grid',gridTemplateColumns:'3fr 1fr 1fr 1fr',fontSize:'0.85rem',padding:'6px 0',borderBottom:'1px solid #eee',color:'#222'}}>
+            <div><div style={{fontWeight:500}}>{l.nom_plat}</div>{l.complement_nom&&<div style={{fontSize:'0.72rem',color:'#888'}}>+ {l.complement_nom}</div>}{l.remarque&&<div style={{fontSize:'0.7rem',color:'#999',fontStyle:'italic'}}>{l.remarque}</div>}</div>
             <div style={{textAlign:'center',fontWeight:600}}>{l.quantite}</div>
             <div style={{textAlign:'right'}}>{l.prix_unitaire}€</div>
             <div style={{textAlign:'right',fontWeight:700,color:'#b8860b'}}>{l.sous_total}€</div>
           </div>
         ))}
       </div>
-
-      <div style={S.totalBox}>
-        <span style={{fontSize:'1.4rem', fontWeight:900, letterSpacing:'2px'}}>TOTAL</span>
-        <span style={{fontSize:'1.8rem', fontWeight:900, color:'#b8860b'}}>{cmd.montant_total}€</span>
+      <div style={{marginTop:'12px',padding:'12px',border:'2px solid #CC1414',borderRadius:'6px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <span style={{fontSize:'1.4rem',fontWeight:900,letterSpacing:'2px'}}>TOTAL</span>
+        <span style={{fontSize:'1.8rem',fontWeight:900,color:'#b8860b'}}>{cmd.montant_total}€</span>
       </div>
-
-      <div style={S.footer}>
+      <div style={{textAlign:'center',fontSize:'0.75rem',color:'#666',paddingTop:'14px',borderTop:'2px dashed #ccc',lineHeight:'1.8',marginTop:'14px'}}>
         <div>Merci de votre visite ! · Thank you for your visit!</div>
-        <div style={{marginTop:'6px', fontSize:'1rem', fontWeight:900, color:'#b8860b', letterSpacing:'2px'}}>BONNE DÉGUSTATION !</div>
+        <div style={{marginTop:'6px',fontSize:'1rem',fontWeight:900,color:'#b8860b',letterSpacing:'2px'}}>BONNE DÉGUSTATION !</div>
       </div>
     </div>
   )
-
   return (
     <>
-      {/* VERSION ÉCRAN — fond sombre */}
       <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
         <div className="modal" style={{maxWidth:'500px'}}>
-          <div className="modal-header">
-            <span className="modal-title">🧾 FACTURE / RECEIPT</span>
-            <button className="btn-ghost" onClick={onClose}>✕</button>
-          </div>
-          <div className="modal-body" style={{padding:'0 20px 10px'}}>
-            {factureContent}
-          </div>
+          <div className="modal-header"><span className="modal-title">🧾 FACTURE / RECEIPT</span><button className="btn-ghost" onClick={onClose}>✕</button></div>
+          <div className="modal-body" style={{padding:'0 20px 10px'}}>{factureContent}</div>
           <div style={{padding:'0 20px 20px',display:'flex',gap:'10px'}}>
             <button className="btn-ghost" onClick={onClose} style={{flex:1}}>Fermer</button>
             <button className="btn-primary" onClick={handlePrint} style={{flex:2}}>🖨️ Imprimer / Print</button>
           </div>
         </div>
       </div>
-
-      {/* VERSION IMPRESSION — fond blanc, caché à l'écran */}
-      <div id="facture-print-wrapper" style={{display:'none'}}>
-        {factureContent}
-      </div>
+      <div id="facture-print-wrapper" style={{display:'none'}}>{factureContent}</div>
     </>
   )
 }
