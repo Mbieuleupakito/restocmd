@@ -474,51 +474,109 @@ function FactureModal({cmd,onClose}:{cmd:Commande;onClose:()=>void}) {
   const now=new Date()
   const date=now.toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'})
   const heure=now.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})
-  return (
-    <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
-      <div className="modal" style={{maxWidth:'480px'}}>
-        <div className="modal-header"><span className="modal-title">🧾 FACTURE / RECEIPT</span><button className="btn-ghost" onClick={onClose}>✕</button></div>
-        <div className="modal-body">
-          <div style={{textAlign:'center',marginBottom:'20px',paddingBottom:'16px',borderBottom:'2px dashed var(--border)'}}>
-            <div style={{fontFamily:'var(--font-display)',fontSize:'2rem',color:'var(--red)',letterSpacing:'4px'}}>{RESTAURANT.nom}</div>
-            <div style={{fontSize:'0.8rem',color:'var(--text2)',marginTop:'4px'}}>{RESTAURANT.adresse} — {RESTAURANT.codePostal} {RESTAURANT.ville}</div>
-            <div style={{fontSize:'0.75rem',color:'var(--text3)'}}>Tél: {RESTAURANT.tel} · {RESTAURANT.portable}</div>
-            <div style={{fontSize:'0.72rem',color:'var(--text3)'}}>{RESTAURANT.metro}</div>
-          </div>
-          <div style={{display:'flex',justifyContent:'space-between',marginBottom:'16px',fontSize:'0.82rem'}}>
-            <div><div style={{color:'var(--text2)'}}>N° / Order #</div><div style={{fontFamily:'var(--font-display)',fontSize:'1.3rem'}}>#{String(cmd.id).padStart(4,'0')}</div></div>
-            <div style={{textAlign:'right'}}><div style={{color:'var(--text2)'}}>Date</div><div>{date}</div><div style={{color:'var(--text3)',fontSize:'0.75rem'}}>{heure}</div></div>
-          </div>
-          {cmd.table_ref&&<div style={{fontSize:'0.82rem',marginBottom:'6px'}}><span style={{color:'var(--text2)'}}>Table / Réf : </span>{cmd.table_ref}</div>}
-          <div style={{fontSize:'0.82rem',marginBottom:'14px'}}><span style={{color:'var(--text2)'}}>Source : </span>{cmd.source}</div>
-          <div style={{borderTop:'1px solid var(--border)',paddingTop:'10px',marginBottom:'10px'}}>
-            <div style={{display:'grid',gridTemplateColumns:'3fr 1fr 1fr 1fr',fontSize:'0.68rem',color:'var(--text3)',marginBottom:'6px',textTransform:'uppercase',letterSpacing:'1px'}}>
-              <span>Article / Item</span><span style={{textAlign:'center'}}>Qté</span><span style={{textAlign:'right'}}>Prix</span><span style={{textAlign:'right'}}>Total</span>
-            </div>
-            {(cmd.lignes||[]).map((l:any,i:number)=>(
-              <div key={i} style={{display:'grid',gridTemplateColumns:'3fr 1fr 1fr 1fr',fontSize:'0.83rem',padding:'5px 0',borderBottom:'1px solid var(--border)'}}>
-                <div>{l.nom_plat||l.nom}{l.complement_nom&&<div style={{fontSize:'0.7rem',color:'var(--text3)'}}>+ {l.complement_nom}</div>}</div>
-                <div style={{textAlign:'center'}}>{l.quantite}</div>
-                <div style={{textAlign:'right'}}>{l.prix_unitaire}€</div>
-                <div style={{textAlign:'right',fontWeight:700,color:'var(--gold)'}}>{l.sous_total}€</div>
-              </div>
-            ))}
-          </div>
-          <div style={{background:'var(--surface2)',borderRadius:'var(--radius)',padding:'12px 14px',marginBottom:'14px'}}>
-            <div style={{display:'flex',justifyContent:'space-between',fontFamily:'var(--font-display)',fontSize:'1.6rem',letterSpacing:'2px'}}>
-              <span>TOTAL</span><span style={{color:'var(--gold)'}}>{cmd.montant_total}€</span>
-            </div>
-          </div>
-          <div style={{textAlign:'center',fontSize:'0.75rem',color:'var(--text3)',paddingTop:'10px',borderTop:'2px dashed var(--border)',lineHeight:'1.8'}}>
-            <div>Merci de votre visite ! · Thank you for your visit!</div>
-            <div style={{marginTop:'6px',fontFamily:'var(--font-display)',fontSize:'1rem',color:'var(--gold)',letterSpacing:'2px'}}>Bonne Dégustation !</div>
-          </div>
+
+  const handlePrint = () => {
+    const el = document.getElementById('facture-print-wrapper')
+    if (!el) return
+    const original = document.body.innerHTML
+    document.body.innerHTML = el.outerHTML
+    window.print()
+    document.body.innerHTML = original
+    window.location.reload()
+  }
+
+  const S = {
+    page: { background:'white', color:'#111', fontFamily:'Arial, sans-serif', padding:'32px', maxWidth:'480px', margin:'0 auto' } as React.CSSProperties,
+    header: { textAlign:'center' as const, marginBottom:'20px', paddingBottom:'16px', borderBottom:'2px dashed #ccc' },
+    nom: { fontSize:'2rem', fontWeight:900, color:'#CC1414', letterSpacing:'4px', fontFamily:'Arial Black, Arial, sans-serif' },
+    sub: { fontSize:'0.78rem', color:'#555', marginTop:'4px' },
+    row2: { display:'flex', justifyContent:'space-between', marginBottom:'12px', fontSize:'0.82rem', color:'#333' },
+    thRow: { display:'grid', gridTemplateColumns:'3fr 1fr 1fr 1fr', fontSize:'0.68rem', color:'#888', textTransform:'uppercase' as const, letterSpacing:'1px', marginBottom:'6px', paddingBottom:'4px', borderBottom:'1px solid #ccc' },
+    tdRow: { display:'grid', gridTemplateColumns:'3fr 1fr 1fr 1fr', fontSize:'0.85rem', padding:'6px 0', borderBottom:'1px solid #eee', color:'#222' },
+    totalBox: { marginTop:'12px', padding:'12px', border:'2px solid #CC1414', borderRadius:'6px', display:'flex', justifyContent:'space-between', alignItems:'center' },
+    footer: { textAlign:'center' as const, fontSize:'0.75rem', color:'#666', paddingTop:'14px', borderTop:'2px dashed #ccc', lineHeight:'1.8', marginTop:'14px' },
+  }
+
+  const factureContent = (
+    <div style={S.page}>
+      <div style={S.header}>
+        <div style={S.nom}>{RESTAURANT.nom}</div>
+        <div style={S.sub}>{RESTAURANT.adresse} — {RESTAURANT.codePostal} {RESTAURANT.ville}</div>
+        <div style={{...S.sub, fontSize:'0.72rem'}}>Tél: {RESTAURANT.tel} · {RESTAURANT.portable}</div>
+        <div style={{...S.sub, fontSize:'0.7rem'}}>{RESTAURANT.metro}</div>
+      </div>
+
+      <div style={S.row2}>
+        <div>
+          <div style={{color:'#888', fontSize:'0.72rem'}}>N° / Order #</div>
+          <div style={{fontSize:'1.4rem', fontWeight:900}}>#{String(cmd.id).padStart(4,'0')}</div>
         </div>
-        <div style={{padding:'0 20px 20px',display:'flex',gap:'10px'}}>
-          <button className="btn-ghost" onClick={onClose} style={{flex:1}}>Fermer</button>
-          <button className="btn-primary" onClick={()=>window.print()} style={{flex:2}}>🖨️ Imprimer / Print</button>
+        <div style={{textAlign:'right'}}>
+          <div style={{color:'#888', fontSize:'0.72rem'}}>Date</div>
+          <div style={{fontWeight:600}}>{date}</div>
+          <div style={{color:'#888', fontSize:'0.72rem'}}>{heure}</div>
         </div>
       </div>
+
+      {cmd.table_ref && <div style={{fontSize:'0.82rem',marginBottom:'4px',color:'#333'}}><strong>Table / Réf :</strong> {cmd.table_ref}</div>}
+      <div style={{fontSize:'0.82rem',marginBottom:'14px',color:'#333'}}><strong>Source :</strong> {cmd.source}</div>
+
+      <div style={{borderTop:'1px solid #ccc', paddingTop:'10px'}}>
+        <div style={S.thRow}>
+          <span>Article / Item</span>
+          <span style={{textAlign:'center'}}>Qté</span>
+          <span style={{textAlign:'right'}}>Prix</span>
+          <span style={{textAlign:'right'}}>Total</span>
+        </div>
+        {(cmd.lignes||[]).map((l:any,i:number)=>(
+          <div key={i} style={S.tdRow}>
+            <div>
+              <div style={{fontWeight:500}}>{l.nom_plat||l.nom}</div>
+              {l.complement_nom&&<div style={{fontSize:'0.72rem',color:'#888'}}>+ {l.complement_nom}</div>}
+              {l.remarque&&<div style={{fontSize:'0.7rem',color:'#999',fontStyle:'italic'}}>{l.remarque}</div>}
+            </div>
+            <div style={{textAlign:'center',fontWeight:600}}>{l.quantite}</div>
+            <div style={{textAlign:'right'}}>{l.prix_unitaire}€</div>
+            <div style={{textAlign:'right',fontWeight:700,color:'#b8860b'}}>{l.sous_total}€</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={S.totalBox}>
+        <span style={{fontSize:'1.4rem', fontWeight:900, letterSpacing:'2px'}}>TOTAL</span>
+        <span style={{fontSize:'1.8rem', fontWeight:900, color:'#b8860b'}}>{cmd.montant_total}€</span>
+      </div>
+
+      <div style={S.footer}>
+        <div>Merci de votre visite ! · Thank you for your visit!</div>
+        <div style={{marginTop:'6px', fontSize:'1rem', fontWeight:900, color:'#b8860b', letterSpacing:'2px'}}>BONNE DÉGUSTATION !</div>
+      </div>
     </div>
+  )
+
+  return (
+    <>
+      {/* VERSION ÉCRAN — fond sombre */}
+      <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
+        <div className="modal" style={{maxWidth:'500px'}}>
+          <div className="modal-header">
+            <span className="modal-title">🧾 FACTURE / RECEIPT</span>
+            <button className="btn-ghost" onClick={onClose}>✕</button>
+          </div>
+          <div className="modal-body" style={{padding:'0 20px 10px'}}>
+            {factureContent}
+          </div>
+          <div style={{padding:'0 20px 20px',display:'flex',gap:'10px'}}>
+            <button className="btn-ghost" onClick={onClose} style={{flex:1}}>Fermer</button>
+            <button className="btn-primary" onClick={handlePrint} style={{flex:2}}>🖨️ Imprimer / Print</button>
+          </div>
+        </div>
+      </div>
+
+      {/* VERSION IMPRESSION — fond blanc, caché à l'écran */}
+      <div id="facture-print-wrapper" style={{display:'none'}}>
+        {factureContent}
+      </div>
+    </>
   )
 }
