@@ -395,7 +395,8 @@ function CommandeCard({cmd,onStatut,onEdit,onDelete,onFacture}:{cmd:Commande;onS
   const elapsed=Math.floor((Date.now()-new Date(cmd.heure_creation).getTime())/60000)
   const plats=(cmd.lignes||[]).filter((l:any)=>l.destination==='cuisine')
   const boissons=(cmd.lignes||[]).filter((l:any)=>l.destination==='accueil')
-  const srcClass=cmd.source==='Deliveroo'?'source-deliveroo':cmd.source==='Uber Eats'?'source-ubereats':cmd.source==='À emporter'?'source-emporter':'source-presentiel'
+  const src = cmd.source as string
+  const srcClass=src==='Deliveroo'?'source-deliveroo':src==='Uber Eats'?'source-ubereats':src==='À emporter'?'source-emporter':src==='En ligne'?'source-enligne':'source-presentiel'
   return (
     <div className={`commande-card ${cmd.statut}`} style={{opacity:cmd.statut==='servie'?0.6:1}}>
       <div style={{padding:'12px 16px',display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer'}} onClick={()=>setOpen(o=>!o)}>
