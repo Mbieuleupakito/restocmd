@@ -7,13 +7,11 @@ type Statut = 'nouvelle' | 'en_preparation' | 'prete' | 'servie'
 interface Ligne { id: number; nom_plat: string; quantite: number; complement_nom: string | null; remarque: string; sous_total: number; destination: string }
 interface Commande { id: number; source: string; table_ref: string; statut: Statut; montant_total: number; heure_creation: string; notes: string; lignes: Ligne[] }
 
-// Taille du texte selon nombre de commandes
+// Taille selon nombre de commandes
 function getFontSizes(nb: number) {
-  if (nb === 1) return { num: '4rem', plat: '3rem', comp: '1.6rem', btn: '1.4rem', pad: '20px' }
-  if (nb === 2) return { num: '3rem', plat: '2.2rem', comp: '1.3rem', btn: '1.1rem', pad: '16px' }
-  if (nb === 3) return { num: '2.4rem', plat: '1.8rem', comp: '1.1rem', btn: '1rem',  pad: '12px' }
-  if (nb === 4) return { num: '2rem',   plat: '1.5rem', comp: '1rem',   btn: '0.9rem', pad: '10px' }
-  return             { num: '1.6rem',  plat: '1.2rem', comp: '0.9rem', btn: '0.85rem', pad: '8px'  }
+  if (nb <= 2) return { num: '2.8rem', plat: '1.8rem', comp: '1rem',   btn: '1rem',   pad: '14px', gap: '10px' }
+  if (nb <= 4) return { num: '2rem',   plat: '1.3rem', comp: '0.85rem', btn: '0.9rem', pad: '10px', gap: '8px'  }
+  return             { num: '1.6rem',  plat: '1.1rem', comp: '0.75rem', btn: '0.8rem', pad: '8px',  gap: '6px'  }
 }
 
 export default function CuisinePage() {
@@ -250,9 +248,9 @@ function AutoScrollGrid({ commandes, now, alarmCmds, onStatut }: {
   const nb = commandes.length
   const fs = getFontSizes(nb)
 
-  // Défilement automatique si plus de 3 commandes
+  // Défilement auto si trop de commandes
   useEffect(() => {
-    if (nb <= 3) {
+    if (nb <= 4) {
       if (scrollRef.current) { clearInterval(scrollRef.current); scrollRef.current = null }
       if (containerRef.current) containerRef.current.scrollTop = 0
       return
@@ -265,21 +263,20 @@ function AutoScrollGrid({ commandes, now, alarmCmds, onStatut }: {
       const maxScroll = container.scrollHeight - container.clientHeight
       if (container.scrollTop >= maxScroll - 2) direction = -1
       if (container.scrollTop <= 0) direction = 1
-      container.scrollTop += direction * 1.2
+      container.scrollTop += direction * 1.5
     }, 30)
     return () => { if (scrollRef.current) clearInterval(scrollRef.current) }
   }, [nb])
 
-  // Disposition : 1-2 commandes en colonne, 3+ en grille 2 colonnes
-  const isGrid = nb >= 3
   return (
     <div ref={containerRef} style={{
-      height:'100%', overflowY: nb > 3 ? 'auto' : 'hidden',
-      display: isGrid ? 'grid' : 'flex',
-      gridTemplateColumns: isGrid ? 'repeat(2, 1fr)' : undefined,
-      flexDirection: isGrid ? undefined : 'column',
-      gap:'8px',
-      scrollBehavior:'smooth',
+      height: '100%',
+      overflowY: nb > 4 ? 'auto' : 'hidden',
+      display: 'grid',
+      gridTemplateColumns: nb === 1 ? '1fr' : 'repeat(2, 1fr)',
+      gridAutoRows: nb <= 2 ? '1fr' : 'auto',
+      gap: fs.gap,
+      alignContent: 'start',
     }}>
       {commandes.map(cmd => (
         <CuisineCard key={cmd.id} cmd={cmd} now={now} fs={fs}
@@ -289,16 +286,13 @@ function AutoScrollGrid({ commandes, now, alarmCmds, onStatut }: {
   )
 }
 
-function Chrono({ heure_creation, now, small }: { heure_creation: string; now: number; small?: boolean }) {
+function Chrono({ heure_creation, now }: { heure_creation: string; now: number }) {
   const mins = Math.floor((now - new Date(heure_creation).getTime()) / 60000)
   const urgent = mins >= 20; const warn = mins >= 10
   return (
-    <div style={{ display:'flex', alignItems:'center', gap:'4px' }}>
-      <span style={{ fontSize: small ? '0.8rem' : '1rem' }}>{urgent ? '🔴' : warn ? '🟡' : '🟢'}</span>
-      <span style={{ fontFamily:'var(--font-display)', fontSize: small ? '1rem' : '1.3rem', color: urgent?'var(--red)':warn?'var(--yellow)':'var(--green)' }}>
-        {mins < 60 ? `${mins}min` : `${Math.floor(mins/60)}h${mins%60}`}
-      </span>
-    </div>
+    <span style={{ fontFamily:'var(--font-display)', fontSize:'1.1rem', color: urgent?'var(--red)':warn?'var(--yellow)':'var(--green)' }}>
+      {urgent ? '🔴' : warn ? '🟡' : '🟢'} {mins < 60 ? `${mins}min` : `${Math.floor(mins/60)}h${mins%60}`}
+    </span>
   )
 }
 
@@ -312,73 +306,74 @@ function CuisineCard({ cmd, now, isNew, onStatut, fs, nb }: {
 
   return (
     <div className={`commande-card ${cmd.statut} ${isNew?'flash-new':''}`}
-      style={{ borderLeftWidth:'5px', background: urgent ? 'rgba(204,20,20,0.08)' : 'var(--surface)', display:'flex', flexDirection:'column' }}>
+      style={{
+        borderLeftWidth:'4px',
+        background: urgent ? 'rgba(204,20,20,0.08)' : 'var(--surface)',
+        display:'flex', flexDirection:'column',
+        overflow:'hidden',
+        minHeight: 0,
+      }}>
 
-      {/* HEADER */}
-      <div style={{ padding:`${fs.pad} ${fs.pad}`, display:'flex', alignItems:'center', justifyContent:'space-between', gap:'8px' }}>
-        <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
-          <div style={{ fontFamily:'var(--font-display)', fontSize:fs.num, lineHeight:1, color: cmd.statut==='nouvelle'?'var(--red)':'var(--yellow)', flexShrink:0 }}>
+      {/* HEADER COMPACT */}
+      <div style={{ padding:`${fs.pad} ${fs.pad} 6px`, display:'flex', alignItems:'center', justifyContent:'space-between', gap:'6px', flexShrink:0 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:'8px', minWidth:0 }}>
+          <span style={{ fontFamily:'var(--font-display)', fontSize:fs.num, lineHeight:1, color: cmd.statut==='nouvelle'?'var(--red)':'var(--yellow)', flexShrink:0 }}>
             #{String(cmd.id).padStart(3,'0')}
-          </div>
-          <div>
-            <div style={{ display:'flex', gap:'6px', alignItems:'center', marginBottom:'4px', flexWrap:'wrap' }}>
-              <span className={`source-tag ${srcClass}`} style={{fontSize:'0.6rem'}}>{cmd.source}</span>
-              {cmd.table_ref && <span style={{ fontSize:'0.75rem', color:'var(--text2)', fontWeight:600 }}>{cmd.table_ref.split('—')[0]}</span>}
-            </div>
-            <Chrono heure_creation={cmd.heure_creation} now={now} small={nb >= 4} />
+          </span>
+          <div style={{ minWidth:0 }}>
+            <Chrono heure_creation={cmd.heure_creation} now={now} />
+            {cmd.table_ref && <div style={{ fontSize:'0.7rem', color:'var(--text3)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{cmd.table_ref.split('—')[0].trim()}</div>}
           </div>
         </div>
-        <div>
-          {cmd.statut==='nouvelle' && <span className="badge badge-red" style={{fontSize:'0.6rem',padding:'3px 8px'}}>NEW</span>}
-          {cmd.statut==='en_preparation' && <span className="badge" style={{background:'var(--yellow-soft)',color:'var(--yellow)',border:'1px solid var(--yellow)',fontSize:'0.6rem',padding:'3px 8px'}}>PRÉPA</span>}
+        <div style={{ flexShrink:0 }}>
+          {cmd.statut==='nouvelle' && <span className="badge badge-red" style={{fontSize:'0.55rem',padding:'2px 6px'}}>NEW</span>}
+          {cmd.statut==='en_preparation' && <span className="badge" style={{background:'var(--yellow-soft)',color:'var(--yellow)',border:'1px solid var(--yellow)',fontSize:'0.55rem',padding:'2px 6px'}}>PRÉPA</span>}
         </div>
       </div>
 
-      {/* LIGNES PLATS */}
-      <div style={{ padding:`0 ${fs.pad} ${fs.pad}`, borderTop:'1px solid var(--border)', flex:1 }}>
+      {/* LIGNES PLATS — texte sur 1 ligne max */}
+      <div style={{ padding:`4px ${fs.pad}`, borderTop:'1px solid var(--border)', flex:1, overflow:'hidden' }}>
         {cmd.lignes.map((l, i) => (
-          <div key={i} style={{ padding:`${parseInt(fs.pad)*0.6}px 0`, borderBottom: i < cmd.lignes.length-1 ? '1px solid var(--surface2)' : 'none' }}>
-            <div style={{ display:'flex', alignItems:'flex-start', gap:'10px' }}>
-              <div style={{ fontFamily:'var(--font-display)', fontSize:fs.num, color:'var(--red)', lineHeight:1, minWidth:'44px', textAlign:'center', flexShrink:0 }}>
-                {l.quantite}×
+          <div key={i} style={{ display:'flex', alignItems:'baseline', gap:'8px', padding:'3px 0', borderBottom: i < cmd.lignes.length-1 ? '1px solid var(--surface2)' : 'none' }}>
+            <span style={{ fontFamily:'var(--font-display)', fontSize:fs.num, color:'var(--red)', lineHeight:1, flexShrink:0 }}>
+              {l.quantite}×
+            </span>
+            <div style={{ minWidth:0, flex:1 }}>
+              <div style={{ fontFamily:'var(--font-display)', fontSize:fs.plat, color:'var(--text)', lineHeight:1.2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                {l.nom_plat}
               </div>
-              <div style={{ flex:1 }}>
-                <div style={{ fontFamily:'var(--font-display)', fontSize:fs.plat, letterSpacing:'1px', color:'var(--text)', lineHeight:1.1 }}>
-                  {l.nom_plat}
+              {l.complement_nom && (
+                <div style={{ fontSize:fs.comp, color:'var(--gold)', lineHeight:1.2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                  ↳ {l.complement_nom}
                 </div>
-                {l.complement_nom && (
-                  <div style={{ fontSize:fs.comp, color:'var(--gold)', marginTop:'4px', fontWeight:600 }}>
-                    ↳ {l.complement_nom}
-                  </div>
-                )}
-                {l.remarque && (
-                  <div style={{ fontSize:fs.comp, color:'white', background:'var(--red)', padding:'4px 8px', borderRadius:'6px', marginTop:'4px', fontWeight:700 }}>
-                    ⚠️ {l.remarque}
-                  </div>
-                )}
-              </div>
+              )}
+              {l.remarque && (
+                <div style={{ fontSize:fs.comp, color:'var(--red)', fontWeight:700, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                  ⚠️ {l.remarque}
+                </div>
+              )}
             </div>
           </div>
         ))}
         {cmd.notes && (
-          <div style={{ marginTop:'6px', padding:'6px 8px', background:'var(--red-soft)', borderRadius:'6px', fontSize:fs.comp, color:'var(--red)', fontWeight:600 }}>
+          <div style={{ fontSize:fs.comp, color:'var(--red)', marginTop:'3px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
             📝 {cmd.notes}
           </div>
         )}
       </div>
 
-      {/* ACTION */}
-      <div style={{ padding:`8px ${fs.pad}`, borderTop:'1px solid var(--border)' }}>
+      {/* BOUTON — toujours visible en bas */}
+      <div style={{ padding:`6px ${fs.pad}`, borderTop:'1px solid var(--border)', flexShrink:0 }}>
         {cmd.statut === 'nouvelle' && (
-          <button className="btn-gold" style={{ width:'100%', fontFamily:'var(--font-display)', fontSize:fs.btn, letterSpacing:'2px', padding:fs.pad }}
+          <button className="btn-gold" style={{ width:'100%', fontFamily:'var(--font-display)', fontSize:fs.btn, letterSpacing:'1px', padding:'10px 8px' }}
             onClick={() => onStatut(cmd.id, 'en_preparation')}>
             🔥 EN PRÉPARATION
           </button>
         )}
         {cmd.statut === 'en_preparation' && (
-          <button className="btn-green" style={{ width:'100%', fontFamily:'var(--font-display)', fontSize:fs.btn, letterSpacing:'2px', padding:fs.pad }}
+          <button className="btn-green" style={{ width:'100%', fontFamily:'var(--font-display)', fontSize:fs.btn, letterSpacing:'1px', padding:'10px 8px' }}
             onClick={() => onStatut(cmd.id, 'prete')}>
-            ✅ PRÊTE ✓
+            ✅ PRÊTE
           </button>
         )}
       </div>
