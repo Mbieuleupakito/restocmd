@@ -7,6 +7,15 @@ type Statut = 'nouvelle' | 'en_preparation' | 'prete' | 'servie'
 interface Ligne { id: number; nom_plat: string; quantite: number; complement_nom: string | null; remarque: string; sous_total: number; destination: string }
 interface Commande { id: number; source: string; table_ref: string; statut: Statut; montant_total: number; heure_creation: string; notes: string; lignes: Ligne[] }
 
+// Taille du texte selon nombre de commandes
+function getFontSizes(nb: number) {
+  if (nb === 1) return { num: '4rem', plat: '3rem', comp: '1.6rem', btn: '1.4rem', pad: '20px' }
+  if (nb === 2) return { num: '3rem', plat: '2.2rem', comp: '1.3rem', btn: '1.1rem', pad: '16px' }
+  if (nb === 3) return { num: '2.4rem', plat: '1.8rem', comp: '1.1rem', btn: '1rem',  pad: '12px' }
+  if (nb === 4) return { num: '2rem',   plat: '1.5rem', comp: '1rem',   btn: '0.9rem', pad: '10px' }
+  return             { num: '1.6rem',  plat: '1.2rem', comp: '0.9rem', btn: '0.85rem', pad: '8px'  }
+}
+
 export default function CuisinePage() {
   const router = useRouter()
   // On n'affiche que nouvelle + en_preparation en cuisine
@@ -217,8 +226,8 @@ export default function CuisinePage() {
         </div>
       </div>
 
-      {/* COMMANDES */}
-      <div style={{ flex:1, overflowY:'auto', padding:'12px' }}>
+      {/* COMMANDES — GRILLE RESPONSIVE + DÉFILEMENT AUTO */}
+      <div style={{ flex:1, overflow:'hidden', padding:'8px' }}>
         {commandes.length === 0 ? (
           <div className="empty-state">
             <span className="emoji">🍳</span>
@@ -226,78 +235,124 @@ export default function CuisinePage() {
             <p style={{ marginTop:'8px', fontSize:'0.75rem', color:'var(--text3)' }}>Les commandes prêtes ont disparu ✅</p>
           </div>
         ) : (
-          <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
-            {commandes.map(cmd => (
-              <CuisineCard key={cmd.id} cmd={cmd} now={now} isNew={alarmCmds.includes(cmd.id)} onStatut={changerStatut} />
-            ))}
-          </div>
+          <AutoScrollGrid commandes={commandes} now={now} alarmCmds={alarmCmds} onStatut={changerStatut} />
         )}
       </div>
     </div>
   )
 }
 
-function Chrono({ heure_creation, now }: { heure_creation: string; now: number }) {
+function AutoScrollGrid({ commandes, now, alarmCmds, onStatut }: {
+  commandes: Commande[]; now: number; alarmCmds: number[]; onStatut: (id:number,s:Statut)=>void
+}) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<any>(null)
+  const nb = commandes.length
+  const fs = getFontSizes(nb)
+
+  // Défilement automatique si plus de 3 commandes
+  useEffect(() => {
+    if (nb <= 3) {
+      if (scrollRef.current) { clearInterval(scrollRef.current); scrollRef.current = null }
+      if (containerRef.current) containerRef.current.scrollTop = 0
+      return
+    }
+    const container = containerRef.current
+    if (!container) return
+    let direction = 1
+    scrollRef.current = setInterval(() => {
+      if (!container) return
+      const maxScroll = container.scrollHeight - container.clientHeight
+      if (container.scrollTop >= maxScroll - 2) direction = -1
+      if (container.scrollTop <= 0) direction = 1
+      container.scrollTop += direction * 1.2
+    }, 30)
+    return () => { if (scrollRef.current) clearInterval(scrollRef.current) }
+  }, [nb])
+
+  // Disposition : 1-2 commandes en colonne, 3+ en grille 2 colonnes
+  const isGrid = nb >= 3
+  return (
+    <div ref={containerRef} style={{
+      height:'100%', overflowY: nb > 3 ? 'auto' : 'hidden',
+      display: isGrid ? 'grid' : 'flex',
+      gridTemplateColumns: isGrid ? 'repeat(2, 1fr)' : undefined,
+      flexDirection: isGrid ? undefined : 'column',
+      gap:'8px',
+      scrollBehavior:'smooth',
+    }}>
+      {commandes.map(cmd => (
+        <CuisineCard key={cmd.id} cmd={cmd} now={now} fs={fs}
+          isNew={alarmCmds.includes(cmd.id)} onStatut={onStatut} nb={nb} />
+      ))}
+    </div>
+  )
+}
+
+function Chrono({ heure_creation, now, small }: { heure_creation: string; now: number; small?: boolean }) {
   const mins = Math.floor((now - new Date(heure_creation).getTime()) / 60000)
   const urgent = mins >= 20; const warn = mins >= 10
   return (
-    <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
-      <span style={{ fontSize:'1rem' }}>{urgent ? '🔴' : warn ? '🟡' : '🟢'}</span>
-      <span style={{ fontFamily:'var(--font-display)', fontSize:'1.3rem', color: urgent?'var(--red)':warn?'var(--yellow)':'var(--green)', letterSpacing:'1px' }}>
-        {mins < 60 ? `${mins} min` : `${Math.floor(mins/60)}h${mins%60}`}
+    <div style={{ display:'flex', alignItems:'center', gap:'4px' }}>
+      <span style={{ fontSize: small ? '0.8rem' : '1rem' }}>{urgent ? '🔴' : warn ? '🟡' : '🟢'}</span>
+      <span style={{ fontFamily:'var(--font-display)', fontSize: small ? '1rem' : '1.3rem', color: urgent?'var(--red)':warn?'var(--yellow)':'var(--green)' }}>
+        {mins < 60 ? `${mins}min` : `${Math.floor(mins/60)}h${mins%60}`}
       </span>
     </div>
   )
 }
 
-function CuisineCard({ cmd, now, isNew, onStatut }: { cmd: Commande; now: number; isNew: boolean; onStatut: (id:number,s:Statut)=>void }) {
+function CuisineCard({ cmd, now, isNew, onStatut, fs, nb }: {
+  cmd: Commande; now: number; isNew: boolean; fs: any; nb: number
+  onStatut: (id:number,s:Statut)=>void
+}) {
   const mins = Math.floor((now - new Date(cmd.heure_creation).getTime()) / 60000)
   const urgent = mins >= 20 && cmd.statut === 'nouvelle'
   const srcClass = cmd.source==='Deliveroo'?'source-deliveroo':cmd.source==='Uber Eats'?'source-ubereats':cmd.source==='À emporter'?'source-emporter':cmd.source==='En ligne'?'source-enligne':'source-presentiel'
 
   return (
     <div className={`commande-card ${cmd.statut} ${isNew?'flash-new':''}`}
-      style={{ borderLeftWidth:'6px', background: urgent ? 'rgba(204,20,20,0.08)' : 'var(--surface)' }}>
+      style={{ borderLeftWidth:'5px', background: urgent ? 'rgba(204,20,20,0.08)' : 'var(--surface)', display:'flex', flexDirection:'column' }}>
 
       {/* HEADER */}
-      <div style={{ padding:'14px 16px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-        <div style={{ display:'flex', alignItems:'center', gap:'12px' }}>
-          <div style={{ fontFamily:'var(--font-display)', fontSize:'clamp(2rem,6vw,3.5rem)', lineHeight:1, color: cmd.statut==='nouvelle'?'var(--red)':'var(--yellow)' }}>
+      <div style={{ padding:`${fs.pad} ${fs.pad}`, display:'flex', alignItems:'center', justifyContent:'space-between', gap:'8px' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
+          <div style={{ fontFamily:'var(--font-display)', fontSize:fs.num, lineHeight:1, color: cmd.statut==='nouvelle'?'var(--red)':'var(--yellow)', flexShrink:0 }}>
             #{String(cmd.id).padStart(3,'0')}
           </div>
           <div>
-            <div style={{ display:'flex', gap:'8px', alignItems:'center', marginBottom:'6px' }}>
-              <span className={`source-tag ${srcClass}`}>{cmd.source}</span>
-              {cmd.table_ref && <span style={{ fontSize:'0.85rem', color:'var(--text2)', fontWeight:600 }}>{cmd.table_ref}</span>}
+            <div style={{ display:'flex', gap:'6px', alignItems:'center', marginBottom:'4px', flexWrap:'wrap' }}>
+              <span className={`source-tag ${srcClass}`} style={{fontSize:'0.6rem'}}>{cmd.source}</span>
+              {cmd.table_ref && <span style={{ fontSize:'0.75rem', color:'var(--text2)', fontWeight:600 }}>{cmd.table_ref.split('—')[0]}</span>}
             </div>
-            <Chrono heure_creation={cmd.heure_creation} now={now} />
+            <Chrono heure_creation={cmd.heure_creation} now={now} small={nb >= 4} />
           </div>
         </div>
         <div>
-          {cmd.statut==='nouvelle' && <span className="badge badge-red" style={{fontSize:'0.75rem',padding:'4px 12px'}}>NOUVELLE</span>}
-          {cmd.statut==='en_preparation' && <span className="badge" style={{background:'var(--yellow-soft)',color:'var(--yellow)',border:'1px solid var(--yellow)',fontSize:'0.75rem',padding:'4px 12px'}}>EN PRÉPA.</span>}
+          {cmd.statut==='nouvelle' && <span className="badge badge-red" style={{fontSize:'0.6rem',padding:'3px 8px'}}>NEW</span>}
+          {cmd.statut==='en_preparation' && <span className="badge" style={{background:'var(--yellow-soft)',color:'var(--yellow)',border:'1px solid var(--yellow)',fontSize:'0.6rem',padding:'3px 8px'}}>PRÉPA</span>}
         </div>
       </div>
 
-      {/* LIGNES PLATS EN GRAND */}
-      <div style={{ padding:'0 16px 12px', borderTop:'1px solid var(--border)' }}>
+      {/* LIGNES PLATS */}
+      <div style={{ padding:`0 ${fs.pad} ${fs.pad}`, borderTop:'1px solid var(--border)', flex:1 }}>
         {cmd.lignes.map((l, i) => (
-          <div key={i} style={{ padding:'12px 0', borderBottom: i < cmd.lignes.length-1 ? '1px solid var(--surface2)' : 'none' }}>
-            <div style={{ display:'flex', alignItems:'flex-start', gap:'16px' }}>
-              <div style={{ fontFamily:'var(--font-display)', fontSize:'clamp(2.5rem,8vw,4rem)', color:'var(--red)', lineHeight:1, minWidth:'60px', textAlign:'center', flexShrink:0 }}>
+          <div key={i} style={{ padding:`${parseInt(fs.pad)*0.6}px 0`, borderBottom: i < cmd.lignes.length-1 ? '1px solid var(--surface2)' : 'none' }}>
+            <div style={{ display:'flex', alignItems:'flex-start', gap:'10px' }}>
+              <div style={{ fontFamily:'var(--font-display)', fontSize:fs.num, color:'var(--red)', lineHeight:1, minWidth:'44px', textAlign:'center', flexShrink:0 }}>
                 {l.quantite}×
               </div>
               <div style={{ flex:1 }}>
-                <div style={{ fontFamily:'var(--font-display)', fontSize:'clamp(1.6rem,5vw,2.8rem)', letterSpacing:'1px', color:'var(--text)', lineHeight:1.1 }}>
+                <div style={{ fontFamily:'var(--font-display)', fontSize:fs.plat, letterSpacing:'1px', color:'var(--text)', lineHeight:1.1 }}>
                   {l.nom_plat}
                 </div>
                 {l.complement_nom && (
-                  <div style={{ fontSize:'clamp(1rem,3vw,1.4rem)', color:'var(--gold)', marginTop:'6px', fontWeight:600 }}>
-                    ↳ Avec : {l.complement_nom}
+                  <div style={{ fontSize:fs.comp, color:'var(--gold)', marginTop:'4px', fontWeight:600 }}>
+                    ↳ {l.complement_nom}
                   </div>
                 )}
                 {l.remarque && (
-                  <div style={{ fontSize:'clamp(0.9rem,2.5vw,1.2rem)', color:'white', background:'var(--red)', padding:'6px 12px', borderRadius:'8px', marginTop:'8px', fontWeight:700 }}>
+                  <div style={{ fontSize:fs.comp, color:'white', background:'var(--red)', padding:'4px 8px', borderRadius:'6px', marginTop:'4px', fontWeight:700 }}>
                     ⚠️ {l.remarque}
                   </div>
                 )}
@@ -306,24 +361,24 @@ function CuisineCard({ cmd, now, isNew, onStatut }: { cmd: Commande; now: number
           </div>
         ))}
         {cmd.notes && (
-          <div style={{ marginTop:'10px', padding:'10px', background:'var(--red-soft)', borderRadius:'8px', fontSize:'1rem', color:'var(--red)', fontWeight:600 }}>
+          <div style={{ marginTop:'6px', padding:'6px 8px', background:'var(--red-soft)', borderRadius:'6px', fontSize:fs.comp, color:'var(--red)', fontWeight:600 }}>
             📝 {cmd.notes}
           </div>
         )}
       </div>
 
-      {/* ACTION — 1 seul bouton à la fois */}
-      <div style={{ padding:'12px 16px', borderTop:'1px solid var(--border)' }}>
+      {/* ACTION */}
+      <div style={{ padding:`8px ${fs.pad}`, borderTop:'1px solid var(--border)' }}>
         {cmd.statut === 'nouvelle' && (
-          <button className="btn-gold" style={{ width:'100%', fontFamily:'var(--font-display)', fontSize:'clamp(1rem,4vw,1.4rem)', letterSpacing:'2px', padding:'16px' }}
+          <button className="btn-gold" style={{ width:'100%', fontFamily:'var(--font-display)', fontSize:fs.btn, letterSpacing:'2px', padding:fs.pad }}
             onClick={() => onStatut(cmd.id, 'en_preparation')}>
             🔥 EN PRÉPARATION
           </button>
         )}
         {cmd.statut === 'en_preparation' && (
-          <button className="btn-green" style={{ width:'100%', fontFamily:'var(--font-display)', fontSize:'clamp(1rem,4vw,1.4rem)', letterSpacing:'2px', padding:'16px' }}
+          <button className="btn-green" style={{ width:'100%', fontFamily:'var(--font-display)', fontSize:fs.btn, letterSpacing:'2px', padding:fs.pad }}
             onClick={() => onStatut(cmd.id, 'prete')}>
-            ✅ COMMANDE PRÊTE → Disparaît d'ici
+            ✅ PRÊTE ✓
           </button>
         )}
       </div>
