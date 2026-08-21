@@ -9,9 +9,9 @@ interface Commande { id: number; source: string; table_ref: string; statut: Stat
 
 // Taille selon nombre de commandes
 function getFontSizes(nb: number) {
-  if (nb <= 2) return { num: '2.8rem', plat: '1.8rem', comp: '1rem',   btn: '1rem',   pad: '14px', gap: '10px' }
-  if (nb <= 4) return { num: '2rem',   plat: '1.3rem', comp: '0.85rem', btn: '0.9rem', pad: '10px', gap: '8px'  }
-  return             { num: '1.6rem',  plat: '1.1rem', comp: '0.75rem', btn: '0.8rem', pad: '8px',  gap: '6px'  }
+  if (nb <= 2) return { num: '2.5rem', plat: '1.6rem', comp: '1rem',   btn: '1.1rem', pad: '14px' }
+  if (nb <= 4) return { num: '2rem',   plat: '1.3rem', comp: '0.9rem', btn: '1rem',   pad: '12px' }
+  return             { num: '1.6rem',  plat: '1.1rem', comp: '0.8rem', btn: '0.9rem', pad: '10px' }
 }
 
 export default function CuisinePage() {
@@ -250,7 +250,7 @@ function AutoScrollGrid({ commandes, now, alarmCmds, onStatut }: {
 
   // Défilement auto si trop de commandes
   useEffect(() => {
-    if (nb <= 4) {
+    if (nb <= 2) {
       if (scrollRef.current) { clearInterval(scrollRef.current); scrollRef.current = null }
       if (containerRef.current) containerRef.current.scrollTop = 0
       return
@@ -271,12 +271,10 @@ function AutoScrollGrid({ commandes, now, alarmCmds, onStatut }: {
   return (
     <div ref={containerRef} style={{
       height: '100%',
-      overflowY: nb > 4 ? 'auto' : 'hidden',
-      display: 'grid',
-      gridTemplateColumns: nb === 1 ? '1fr' : 'repeat(2, 1fr)',
-      gridAutoRows: nb <= 2 ? '1fr' : 'auto',
-      gap: fs.gap,
-      alignContent: 'start',
+      overflowY: 'auto',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '8px',
     }}>
       {commandes.map(cmd => (
         <CuisineCard key={cmd.id} cmd={cmd} now={now} fs={fs}
