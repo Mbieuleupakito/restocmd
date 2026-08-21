@@ -438,11 +438,32 @@ function FactureModal({cmd,onClose}:{cmd:Commande;onClose:()=>void}) {
   const handlePrint = () => {
     const el = document.getElementById('facture-print-wrapper')
     if (!el) return
-    const original = document.body.innerHTML
-    document.body.innerHTML = el.outerHTML
-    window.print()
-    document.body.innerHTML = original
-    window.location.reload()
+    const iframe = document.createElement('iframe')
+    iframe.style.position = 'fixed'
+    iframe.style.right = '0'
+    iframe.style.bottom = '0'
+    iframe.style.width = '0'
+    iframe.style.height = '0'
+    iframe.style.border = '0'
+    document.body.appendChild(iframe)
+    const doc = iframe.contentWindow?.document
+    if (!doc) return
+    doc.open()
+    doc.write(`
+      <html><head><style>
+        body { margin: 0; padding: 20px; font-family: Arial, sans-serif; background: white; color: #000; }
+        * { color: #000 !important; background: white !important; }
+        .facture-nom { color: #CC1414 !important; }
+        .facture-total-num { color: #b8860b !important; }
+      </style></head>
+      <body>${el.innerHTML}</body></html>
+    `)
+    doc.close()
+    iframe.contentWindow?.focus()
+    setTimeout(() => {
+      iframe.contentWindow?.print()
+      setTimeout(() => document.body.removeChild(iframe), 1000)
+    }, 500)
   }
   const S = {
     page: { background:'white', color:'#111', fontFamily:'Arial, sans-serif', padding:'32px', maxWidth:'480px', margin:'0 auto' } as React.CSSProperties,
