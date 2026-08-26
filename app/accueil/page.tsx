@@ -432,93 +432,188 @@ function CommandeCard({cmd,onStatut,onEdit,onDelete,onFacture}:{cmd:Commande;onS
 }
 
 function FactureModal({cmd,onClose}:{cmd:Commande;onClose:()=>void}) {
-  const now=new Date()
-  const date=now.toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'})
-  const heure=now.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})
+  const now = new Date()
+  const date = now.toLocaleDateString('fr-FR', { weekday:'long', day:'2-digit', month:'long', year:'numeric' })
+  const heure = now.toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit', second:'2-digit' })
+
   const handlePrint = () => {
     const el = document.getElementById('facture-print-wrapper')
     if (!el) return
     const iframe = document.createElement('iframe')
-    iframe.style.position = 'fixed'
-    iframe.style.right = '0'
-    iframe.style.bottom = '0'
-    iframe.style.width = '0'
-    iframe.style.height = '0'
-    iframe.style.border = '0'
+    iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0'
     document.body.appendChild(iframe)
     const doc = iframe.contentWindow?.document
     if (!doc) return
     doc.open()
-    doc.write(`
-      <html><head><style>
-        body { margin: 0; padding: 20px; font-family: Arial, sans-serif; background: white; color: #000; }
-        * { color: #000 !important; background: white !important; }
-        .facture-nom { color: #CC1414 !important; }
-        .facture-total-num { color: #b8860b !important; }
-      </style></head>
-      <body>${el.innerHTML}</body></html>
-    `)
+    doc.write(`<!DOCTYPE html><html><head><style>
+      @import url('https://fonts.googleapis.com/css2?family=Courier+Prime&display=swap');
+      * { margin:0; padding:0; box-sizing:border-box; }
+      body { font-family: 'Courier Prime', 'Courier New', monospace; font-size: 12px; background: white; color: #000; width: 280px; padding: 10px; }
+      .center { text-align: center; }
+      .bold { font-weight: bold; }
+      .large { font-size: 16px; }
+      .line { border-top: 1px dashed #000; margin: 8px 0; }
+      .row { display: flex; justify-content: space-between; padding: 2px 0; }
+      .total-row { display: flex; justify-content: space-between; font-weight: bold; font-size: 15px; padding: 4px 0; }
+    </style></head><body>${el.innerHTML}</body></html>`)
     doc.close()
     iframe.contentWindow?.focus()
-    setTimeout(() => {
-      iframe.contentWindow?.print()
-      setTimeout(() => document.body.removeChild(iframe), 1000)
-    }, 500)
+    setTimeout(() => { iframe.contentWindow?.print(); setTimeout(() => document.body.removeChild(iframe), 1000) }, 500)
   }
-  const S = {
-    page: { background:'white', color:'#111', fontFamily:'Arial, sans-serif', padding:'32px', maxWidth:'480px', margin:'0 auto' } as React.CSSProperties,
-    header: { textAlign:'center' as const, marginBottom:'20px', paddingBottom:'16px', borderBottom:'2px dashed #ccc' },
-  }
-  const factureContent = (
-    <div style={S.page}>
-      <div style={S.header}>
-        <div style={{fontSize:'2rem',fontWeight:900,color:'#CC1414',letterSpacing:'4px'}}>{RESTAURANT.nom}</div>
-        <div style={{fontSize:'0.78rem',color:'#555',marginTop:'4px'}}>{RESTAURANT.adresse} — {RESTAURANT.codePostal} {RESTAURANT.ville}</div>
-        <div style={{fontSize:'0.72rem',color:'#666'}}>Tél: {RESTAURANT.tel} · {RESTAURANT.portable}</div>
-        <div style={{fontSize:'0.7rem',color:'#888'}}>{RESTAURANT.metro}</div>
+
+  // Contenu ticket format thermique
+  const ticketContent = (
+    <div id="facture-print-wrapper" style={{ display:'none', fontFamily:"'Courier New', monospace", fontSize:'12px', width:'280px', padding:'10px', background:'white', color:'#000' }}>
+      {/* EN-TÊTE */}
+      <div style={{ textAlign:'center', marginBottom:'8px' }}>
+        <div style={{ fontWeight:900, fontSize:'16px', letterSpacing:'2px' }}>LE BASSAMBA</div>
+        <div>41Bis, Rue Championnet</div>
+        <div>75018 Paris</div>
+        <div>Tél: 01 71 28 96 35</div>
+        <div>07 51 81 46 84 / 07 53 16 50 92</div>
       </div>
-      <div style={{display:'flex',justifyContent:'space-between',marginBottom:'14px',fontSize:'0.82rem'}}>
-        <div><div style={{color:'#888',fontSize:'0.72rem'}}>N° / Order #</div><div style={{fontSize:'1.4rem',fontWeight:900}}>#{String(cmd.id).padStart(4,'0')}</div></div>
-        <div style={{textAlign:'right'}}><div style={{color:'#888',fontSize:'0.72rem'}}>Date</div><div style={{fontWeight:600}}>{date}</div><div style={{color:'#888',fontSize:'0.72rem'}}>{heure}</div></div>
-      </div>
-      {cmd.table_ref&&<div style={{fontSize:'0.82rem',marginBottom:'4px'}}><strong>Table / Réf :</strong> {cmd.table_ref}</div>}
-      <div style={{fontSize:'0.82rem',marginBottom:'14px'}}><strong>Source :</strong> {cmd.source}</div>
-      <div style={{borderTop:'1px solid #ccc',paddingTop:'10px'}}>
-        <div style={{display:'grid',gridTemplateColumns:'3fr 1fr 1fr 1fr',fontSize:'0.68rem',color:'#888',textTransform:'uppercase',letterSpacing:'1px',marginBottom:'6px',paddingBottom:'4px',borderBottom:'1px solid #ccc'}}>
-          <span>Article / Item</span><span style={{textAlign:'center'}}>Qté</span><span style={{textAlign:'right'}}>Prix</span><span style={{textAlign:'right'}}>Total</span>
+      <div style={{ borderTop:'1px dashed #000', margin:'8px 0' }} />
+
+      {/* INFOS COMMANDE */}
+      <div style={{ marginBottom:'6px' }}>
+        {cmd.table_ref && <div style={{ display:'flex', justifyContent:'space-between' }}>
+          <span>TABLE / RÉF</span><span style={{ fontWeight:700 }}>{cmd.table_ref}</span>
+        </div>}
+        <div style={{ display:'flex', justifyContent:'space-between' }}>
+          <span>SOURCE</span><span>{cmd.source.toUpperCase()}</span>
         </div>
-        {(cmd.lignes||[]).map((l:any,i:number)=>(
-          <div key={i} style={{display:'grid',gridTemplateColumns:'3fr 1fr 1fr 1fr',fontSize:'0.85rem',padding:'6px 0',borderBottom:'1px solid #eee',color:'#222'}}>
-            <div><div style={{fontWeight:500}}>{l.nom_plat}</div>{l.complement_nom&&<div style={{fontSize:'0.72rem',color:'#888'}}>+ {l.complement_nom}</div>}{l.remarque&&<div style={{fontSize:'0.7rem',color:'#999',fontStyle:'italic'}}>{l.remarque}</div>}</div>
-            <div style={{textAlign:'center',fontWeight:600}}>{l.quantite}</div>
-            <div style={{textAlign:'right'}}>{l.prix_unitaire}€</div>
-            <div style={{textAlign:'right',fontWeight:700,color:'#b8860b'}}>{l.sous_total}€</div>
+        <div style={{ display:'flex', justifyContent:'space-between' }}>
+          <span>N° COMMANDE</span><span style={{ fontWeight:700 }}>#{String(cmd.id).padStart(4,'0')}</span>
+        </div>
+      </div>
+      <div style={{ borderTop:'1px dashed #000', margin:'8px 0' }} />
+
+      {/* DATE */}
+      <div style={{ textAlign:'center', marginBottom:'8px', fontSize:'11px' }}>
+        {date.toUpperCase()} {heure}
+      </div>
+      <div style={{ borderTop:'1px dashed #000', margin:'8px 0' }} />
+
+      {/* EN-TÊTE COLONNES */}
+      <div style={{ display:'grid', gridTemplateColumns:'3fr 1fr 1fr 1fr', fontSize:'11px', fontWeight:700, marginBottom:'4px' }}>
+        <span>DÉSIGNATION</span><span style={{ textAlign:'center' }}>QTÉ</span><span style={{ textAlign:'right' }}>P.U</span><span style={{ textAlign:'right' }}>TOTAL</span>
+      </div>
+      <div style={{ borderTop:'1px solid #000', margin:'4px 0' }} />
+
+      {/* ARTICLES */}
+      {(cmd.lignes||[]).map((l:any, i:number) => (
+        <div key={i} style={{ marginBottom:'4px', paddingBottom:'4px', borderBottom:'1px dotted #ccc' }}>
+          <div style={{ display:'grid', gridTemplateColumns:'3fr 1fr 1fr 1fr', alignItems:'start' }}>
+            <div>
+              <div style={{ fontWeight:700, fontSize:'12px' }}>{l.nom_plat}</div>
+              {l.complement_nom && <div style={{ fontSize:'10px' }}>  + {l.complement_nom}</div>}
+              {l.remarque && <div style={{ fontSize:'10px', fontStyle:'italic' }}>  * {l.remarque}</div>}
+            </div>
+            <div style={{ textAlign:'center', fontWeight:700 }}>{l.quantite}</div>
+            <div style={{ textAlign:'right' }}>{Number(l.prix_unitaire).toFixed(2)}€</div>
+            <div style={{ textAlign:'right', fontWeight:700 }}>{Number(l.sous_total).toFixed(2)}€</div>
           </div>
-        ))}
+        </div>
+      ))}
+
+      <div style={{ borderTop:'1px solid #000', margin:'6px 0' }} />
+
+      {/* TOTAL */}
+      <div style={{ display:'flex', justifyContent:'space-between', fontWeight:900, fontSize:'16px', padding:'4px 0' }}>
+        <span>TOTAL TTC</span>
+        <span>{Number(cmd.montant_total).toFixed(2)}€</span>
       </div>
-      <div style={{marginTop:'12px',padding:'12px',border:'2px solid #CC1414',borderRadius:'6px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-        <span style={{fontSize:'1.4rem',fontWeight:900,letterSpacing:'2px'}}>TOTAL</span>
-        <span style={{fontSize:'1.8rem',fontWeight:900,color:'#b8860b'}}>{cmd.montant_total}€</span>
+
+      <div style={{ borderTop:'1px dashed #000', margin:'8px 0' }} />
+
+      {/* MODE DE PAIEMENT */}
+      <div style={{ fontSize:'11px', marginBottom:'6px' }}>
+        <div style={{ display:'flex', justifyContent:'space-between' }}>
+          <span>RÈGLEMENT</span><span>ESPÈCES / CB</span>
+        </div>
       </div>
-      <div style={{textAlign:'center',fontSize:'0.75rem',color:'#666',paddingTop:'14px',borderTop:'2px dashed #ccc',lineHeight:'1.8',marginTop:'14px'}}>
-        <div>Merci de votre visite ! · Thank you for your visit!</div>
-        <div style={{marginTop:'6px',fontSize:'1rem',fontWeight:900,color:'#b8860b',letterSpacing:'2px'}}>BONNE DÉGUSTATION !</div>
+
+      <div style={{ borderTop:'1px dashed #000', margin:'8px 0' }} />
+
+      {/* PIED */}
+      <div style={{ textAlign:'center', fontSize:'11px', lineHeight:'1.8' }}>
+        <div>Merci de votre visite !</div>
+        <div>Thank you for your visit!</div>
+        <div style={{ fontWeight:700, marginTop:'4px', letterSpacing:'1px' }}>BONNE DÉGUSTATION !</div>
+        <div style={{ marginTop:'6px', fontSize:'10px', color:'#666' }}>
+          Métro Simplon / Porte de Clignancourt (L4)
+        </div>
       </div>
     </div>
   )
+
+  // VERSION ÉCRAN
   return (
     <>
+      {ticketContent}
       <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
         <div className="modal" style={{maxWidth:'500px'}}>
-          <div className="modal-header"><span className="modal-title">🧾 FACTURE / RECEIPT</span><button className="btn-ghost" onClick={onClose}>✕</button></div>
-          <div className="modal-body" style={{padding:'0 20px 10px'}}>{factureContent}</div>
+          <div className="modal-header">
+            <span className="modal-title">🧾 FACTURE</span>
+            <button className="btn-ghost" onClick={onClose}>✕</button>
+          </div>
+          <div className="modal-body" style={{padding:'16px 20px'}}>
+            {/* Aperçu écran */}
+            <div style={{ background:'white', color:'#111', borderRadius:'8px', padding:'20px', fontFamily:"'Courier New', monospace", fontSize:'12px' }}>
+              <div style={{ textAlign:'center', marginBottom:'10px' }}>
+                <div style={{ fontWeight:900, fontSize:'15px', letterSpacing:'2px', color:'#CC1414' }}>LE BASSAMBA</div>
+                <div style={{ fontSize:'11px', color:'#555' }}>41Bis, Rue Championnet 75018 Paris</div>
+                <div style={{ fontSize:'11px', color:'#555' }}>Tél: 01 71 28 96 35</div>
+              </div>
+              <div style={{ borderTop:'1px dashed #ccc', margin:'8px 0' }} />
+              <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'4px', fontSize:'11px' }}>
+                <span style={{ color:'#666' }}>N° COMMANDE</span>
+                <span style={{ fontWeight:700 }}>#{String(cmd.id).padStart(4,'0')}</span>
+              </div>
+              {cmd.table_ref && <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'4px', fontSize:'11px' }}>
+                <span style={{ color:'#666' }}>TABLE / RÉF</span>
+                <span style={{ fontWeight:700 }}>{cmd.table_ref}</span>
+              </div>}
+              <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'4px', fontSize:'11px' }}>
+                <span style={{ color:'#666' }}>SOURCE</span>
+                <span>{cmd.source}</span>
+              </div>
+              <div style={{ textAlign:'center', fontSize:'10px', color:'#888', margin:'6px 0' }}>
+                {date.toUpperCase()} · {heure}
+              </div>
+              <div style={{ borderTop:'1px dashed #ccc', margin:'8px 0' }} />
+              <div style={{ display:'grid', gridTemplateColumns:'3fr 1fr 1fr 1fr', fontSize:'10px', fontWeight:700, color:'#888', marginBottom:'4px' }}>
+                <span>DÉSIGNATION</span><span style={{textAlign:'center'}}>QTÉ</span><span style={{textAlign:'right'}}>P.U</span><span style={{textAlign:'right'}}>TOTAL</span>
+              </div>
+              {(cmd.lignes||[]).map((l:any,i:number)=>(
+                <div key={i} style={{ display:'grid', gridTemplateColumns:'3fr 1fr 1fr 1fr', padding:'4px 0', borderBottom:'1px dotted #eee', fontSize:'11px', alignItems:'start' }}>
+                  <div>
+                    <div style={{ fontWeight:600 }}>{l.nom_plat}</div>
+                    {l.complement_nom && <div style={{ fontSize:'10px', color:'#888' }}>+ {l.complement_nom}</div>}
+                  </div>
+                  <div style={{ textAlign:'center' }}>{l.quantite}</div>
+                  <div style={{ textAlign:'right' }}>{Number(l.prix_unitaire).toFixed(2)}€</div>
+                  <div style={{ textAlign:'right', fontWeight:700, color:'#b8860b' }}>{Number(l.sous_total).toFixed(2)}€</div>
+                </div>
+              ))}
+              <div style={{ borderTop:'1px solid #111', margin:'8px 0' }} />
+              <div style={{ display:'flex', justifyContent:'space-between', fontWeight:900, fontSize:'15px' }}>
+                <span>TOTAL TTC</span>
+                <span style={{ color:'#b8860b' }}>{Number(cmd.montant_total).toFixed(2)}€</span>
+              </div>
+              <div style={{ borderTop:'1px dashed #ccc', margin:'8px 0' }} />
+              <div style={{ textAlign:'center', fontSize:'10px', color:'#888' }}>
+                Merci de votre visite · Thank you for your visit<br/>
+                <strong>BONNE DÉGUSTATION !</strong>
+              </div>
+            </div>
+          </div>
           <div style={{padding:'0 20px 20px',display:'flex',gap:'10px'}}>
             <button className="btn-ghost" onClick={onClose} style={{flex:1}}>Fermer</button>
-            <button className="btn-primary" onClick={handlePrint} style={{flex:2}}>🖨️ Imprimer / Print</button>
+            <button className="btn-primary" onClick={handlePrint} style={{flex:2}}>🖨️ Imprimer</button>
           </div>
         </div>
       </div>
-      <div id="facture-print-wrapper" style={{display:'none'}}>{factureContent}</div>
     </>
   )
 }
