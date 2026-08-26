@@ -150,3 +150,52 @@ button { font-family:var(--font-b); cursor:pointer; border:none; transition:all 
   .stat-item { padding:8px 12px; min-width:60px; }
   .alarm-banner { padding:18px 24px; }
 }
+
+/* ── MODE PAYSAGE (landscape) ─────────────────────────── */
+@media (orientation: landscape) and (max-height: 600px) {
+  /* Header plus compact */
+  .app-header { height: 44px; padding: 0 14px; }
+  .header-brand { font-size: 1.1rem; }
+
+  /* Stat bar plus petite */
+  .stat-bar { }
+  .stat-item { padding: 6px 12px; min-width: 56px; }
+  .stat-num { font-size: 1.3rem; }
+  .stat-lbl { font-size: 0.55rem; }
+
+  /* Modals plein écran en paysage */
+  .modal { max-width: 100%; max-height: 100vh; border-radius: 0; margin: 0; }
+  .modal-overlay { padding: 0; align-items: flex-start; }
+
+  /* Alarm banner plus petit */
+  .alarm-banner { font-size: clamp(1.4rem, 5vw, 2.5rem); padding: 16px 28px; }
+}
+
+/* ── TABLETTE PAYSAGE (≥768px largeur) ───────────────────*/
+@media (orientation: landscape) and (min-width: 768px) {
+  /* Page accueil : grille 2 colonnes en paysage */
+  .home-cards { flex-direction: row !important; }
+
+  /* Accueil : layout 2 colonnes (formulaire gauche, commandes droite) */
+  .accueil-landscape {
+    display: grid;
+    grid-template-columns: 360px 1fr;
+    gap: 0;
+    height: 100%;
+  }
+  .accueil-form-panel {
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+  }
+  .accueil-list-panel {
+    overflow-y: auto;
+  }
+}
+
+/* ── GRAND ÉCRAN PC ──────────────────────────────────────*/
+@media (min-width: 1024px) {
+  .modal { max-width: 600px; }
+  .accueil-landscape {
+    grid-template-columns: 420px 1fr;
+  }
+}
