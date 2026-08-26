@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
 interface Commande {
@@ -8,6 +9,7 @@ interface Commande {
 }
 
 export default function PatronPage() {
+  const router = useRouter()
   const [auth, setAuth] = useState(false)
   const [pin, setPin] = useState('')
   const [errPin, setErrPin] = useState(false)
@@ -122,17 +124,22 @@ export default function PatronPage() {
     <div style={S.page}>
       {/* HEADER */}
       <div style={{ background:'#141414', borderBottom:'1px solid #2E2E2E', padding:'14px 20px', display:'flex', alignItems:'center', justifyContent:'space-between', position:'sticky', top:0, zIndex:100 }}>
-        <div>
+        <div onClick={() => router.push('/')} style={{ cursor:'pointer' }}>
           <div style={{ fontFamily:'Bebas Neue, sans-serif', fontSize:'1.5rem', color:'#CC1414', letterSpacing:'3px', lineHeight:1 }}>LE BASSAMBA</div>
-          <div style={{ fontSize:'0.65rem', color:'#606060', letterSpacing:'2px' }}>ESPACE PATRON</div>
+          <div style={{ fontSize:'0.62rem', color:'#606060', letterSpacing:'2px' }}>ESPACE PATRON · Tap pour accueil</div>
         </div>
-        <div style={{ textAlign:'right' }}>
-          <div style={{ fontFamily:'Bebas Neue, sans-serif', fontSize:'1.3rem', color:'#D4A843' }}>
-            {now.toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' })}
+        <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
+          <div style={{ textAlign:'right' }}>
+            <div style={{ fontFamily:'Bebas Neue, sans-serif', fontSize:'1.3rem', color:'#D4A843' }}>
+              {now.toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' })}
+            </div>
+            <div style={{ fontSize:'0.7rem', color:'#606060' }}>
+              {now.toLocaleDateString('fr-FR', { weekday:'short', day:'2-digit', month:'short' })}
+            </div>
           </div>
-          <div style={{ fontSize:'0.7rem', color:'#606060' }}>
-            {now.toLocaleDateString('fr-FR', { weekday:'long', day:'2-digit', month:'long' })}
-          </div>
+          <button onClick={() => router.push('/')} style={{ background:'#1C1C1C', border:'1px solid #2E2E2E', color:'#A0A0A0', borderRadius:'8px', padding:'8px 12px', fontSize:'0.8rem', cursor:'pointer', fontFamily:'DM Sans, sans-serif' }}>
+            ← Retour
+          </button>
         </div>
       </div>
 
